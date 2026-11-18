@@ -2,6 +2,9 @@
 
 # FerroSTB & FerroSTB Toolbox
 
+*Tired of unskippable startup ads, locked home screens, and blocked app installs on your Jio Set-Top Box?
+FerroSTB is a free, lightweight Windows and Linux app that unlocks your Jio STB in under 3 minutes—no coding, no Docker, and no complicated setup required. Run one program on your PC, restart your box, and get a clean, fast Android TV home screen where you can sideload any APK and delete unwanted bloatware.*
+
 **Zero-Dependency Native Rust TR-069 Provisioner, Ad-Blocker & Post-Unlock Management Suite for Jio Set-Top Boxes**
 
 <p>
