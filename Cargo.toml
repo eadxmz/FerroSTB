@@ -1,0 +1,22 @@
+[package]
+name = "ferrostb"
+version = "0.7.0"
+edition = "2021"
+description = "Zero-dependency Rust TR-069 CWMP unlocker, tvOS-Launcher provisioner & Toolbox for Jio STB (Windows & Linux)"
+
+[dependencies]
+tokio = { version = "1.40", features = ["full"] }
+socket2 = "0.5"
+openssl = { version = "0.10", features = ["vendored"] }
+tokio-openssl = "0.6"
+flate2 = "1.0"
+local-ip-address = "0.6"
+anyhow = "1.0"
+
+[[bin]]
+name = "ferrostb"
+path = "src/main.rs"
+
+[[bin]]
+name = "ferrostb-toolbox"
+path = "src/toolbox.rs"

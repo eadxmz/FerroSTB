@@ -1,0 +1,105 @@
+name: Build & Release FerroSTB (Windows & Linux)
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust MSVC toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Build Windows binaries (ferrostb.exe & ferrostb-toolbox.exe)
+        run: cargo build --release --target x86_64-pc-windows-msvc
+
+      - name: Package FerroSTB-Windows-Bundle.zip
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist/FerroSTB-Windows-Bundle | Out-Null
+          Copy-Item target/x86_64-pc-windows-msvc/release/ferrostb.exe dist/FerroSTB-Windows-Bundle/
+          Copy-Item target/x86_64-pc-windows-msvc/release/ferrostb-toolbox.exe dist/FerroSTB-Windows-Bundle/
+          Compress-Archive -Path dist/FerroSTB-Windows-Bundle/* -DestinationPath dist/FerroSTB-Windows-Bundle.zip -Force
+
+      - name: Upload Windows Bundle Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FerroSTB-Windows-Bundle
+          path: dist/FerroSTB-Windows-Bundle.zip
+
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Fetch Official Google Android Platform-Tools (Linux ADB)
+        run: |
+          curl -sSL https://dl.google.com/android/repository/platform-tools-latest-linux.zip -o pt.zip
+          unzip -q pt.zip platform-tools/adb
+          mv platform-tools/adb ./adb_linux
+          chmod +x ./adb_linux
+          rm -rf pt.zip platform-tools
+
+      - name: Install Rust GNU toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+
+      - name: Build Linux binaries (ferrostb & ferrostb-toolbox)
+        run: cargo build --release --target x86_64-unknown-linux-gnu
+
+      - name: Package FerroSTB-Linux-Bundle (.zip & .tar.gz)
+        run: |
+          mkdir -p dist/FerroSTB-Linux-Bundle
+          cp target/x86_64-unknown-linux-gnu/release/ferrostb dist/FerroSTB-Linux-Bundle/
+          cp target/x86_64-unknown-linux-gnu/release/ferrostb-toolbox dist/FerroSTB-Linux-Bundle/
+          chmod +x dist/FerroSTB-Linux-Bundle/ferrostb dist/FerroSTB-Linux-Bundle/ferrostb-toolbox
+          cd dist
+          tar -czf FerroSTB-Linux-Bundle.tar.gz FerroSTB-Linux-Bundle/
+          zip -r FerroSTB-Linux-Bundle.zip FerroSTB-Linux-Bundle/
+
+      - name: Upload Linux Bundle Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FerroSTB-Linux-Bundle
+          path: |
+            dist/FerroSTB-Linux-Bundle.zip
+            dist/FerroSTB-Linux-Bundle.tar.gz
+
+  publish-release:
+    needs: [build-windows, build-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Built Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release_assets
+          merge-multiple: true
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v0.7.0
+          name: "FerroSTB v0.7.0 — Windows & Linux Provisioning Suite + Toolbox"
+          body: |
+            ### FerroSTB v0.7.0 Release Bundles
+            * **`FerroSTB-Windows-Bundle.zip`**: Standalone `ferrostb.exe` & `ferrostb-toolbox.exe` for Windows 10/11 (Run as Administrator).
+            * **`FerroSTB-Linux-Bundle.zip` / `.tar.gz`**: Standalone `ferrostb` & `ferrostb-toolbox` for Linux x86_64 (Run with `sudo ./ferrostb`).
+          draft: false
+          prerelease: false
+          files: |
+            release_assets/FerroSTB-Windows-Bundle.zip
+            release_assets/FerroSTB-Linux-Bundle.zip
+            release_assets/FerroSTB-Linux-Bundle.tar.gz

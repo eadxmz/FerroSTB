@@ -1,0 +1,9 @@
+/target
+/dist
+/apk_backups
+*.log
+*.zip
+*.tar.gz
+*.png
+setup_repo.py
+generate_docs.py
