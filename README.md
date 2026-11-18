@@ -1,211 +1,224 @@
+<div align="center">
+
 # FerroSTB & FerroSTB Toolbox
 
 **Zero-Dependency Native Rust TR-069 Provisioner, Ad-Blocker & Post-Unlock Management Suite for Jio Set-Top Boxes**
+
+<p>
+  <img src="https://img.shields.io/badge/Version-v0.7.0-0969DA?style=flat-square" alt="Version v0.7.0" />
+  <img src="https://img.shields.io/badge/Built%20With-Rust%202021-DEA584?style=flat-square&logo=rust&logoColor=white" alt="Built With Rust" />
+  <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20Linux-2EA043?style=flat-square" alt="Platform Windows and Linux" />
+  <img src="https://img.shields.io/badge/Target-Jio%20STB%20%2F%20Android%20TV-8957E5?style=flat-square&logo=android&logoColor=white" alt="Target Jio STB" />
+  <img src="https://img.shields.io/github/v/release/eadxmz/ferrostb?style=flat-square&color=1F6FEB&label=Release" alt="Latest Release" />
+  <img src="https://img.shields.io/github/license/eadxmz/ferrostb?style=flat-square&color=6E7781&label=License" alt="License" />
+</p>
+
+</div>
+
+---
 
 ## Overview
 
 **FerroSTB** is a standalone, ground-up Rust provisioning engine (`ferrostb` / `ferrostb.exe`) paired with an interactive post-unlock management utility (`ferrostb-toolbox` / `ferrostb-toolbox.exe`). It eliminates legacy multi-container stacks (Docker, MongoDB, Node.js, Python proxies, and external DNS daemons) by compiling the entire network spoofing, TR-069 CWMP TLS server, and ADB provisioning pipeline into native **Windows** and **Linux** executables with all runtime payloads embedded directly in memory.
 
-> \[!NOTE\]
-> **Supported Hardware & Firmware**
->
+> [!NOTE]
+> **Supported Hardware & Firmware:**
 > * **JMSC200Av2** and **JMSB200A** across firmware builds `22.1.09`, `24.1.39`, `25.1.9`, and earlier.
->
 > * **JHS Series (JHSC200 v1 / JioOS 2.0)** on firmware build `stb-jhcs200-11.3.46`.
 
-> \[!TIP\]
-> **System Recovery & Safety**
->
-> * **Accidental App Removal:** Launch `ferrostb-toolbox` and select **Option 4 (Restore System Packages)** to re-bind any uninstalled or disabled firmware package (`cmd package install-existing`) without factory resetting the device.
->
-> * **Full Reset:** Performing a standard factory reset restores the Set-Top Box to its stock out-of-box state at any time.
->
-> * **Wi-Fi Reconnection:** If Wi-Fi fails to authenticate after switching IP modes, select **Forget Network**, re-enter your Wi-Fi password, and reconnect.
+> [!TIP]
+> **Recovery & Troubleshooting:**
+> * **Accidentally removed a system component?** Launch `ferrostb-toolbox` and run **Option 4 (System Package Restore)** to re-bind any unbound or disabled firmware package without resetting the box.
+> * **Device misbehaving?** Perform a factory reset on your Jio STB to restore clean firmware defaults.
+> * **Wi-Fi connection stalled?** Open network settings on the STB, select **Forget Network**, and reconnect.
 
-> \[!IMPORTANT\]
-> **Sideloading APK Files**
-> Because the stock Android package installer UI is disabled in firmware, clicking an `.apk` file inside a TV file manager will not install it. Use **`ferrostb-toolbox` (Option 2)** on your Windows or Linux host machine to drag-and-drop and install `.apk` packages over wireless ADB.
+> [!IMPORTANT]
+> **On-Device APK Installer Restriction:**
+> Jio firmware disables the stock Android package installer UI on the Set-Top Box, preventing direct APK installation from on-device file managers. Use **`ferrostb-toolbox` (Option 2)** on Windows or Linux to drag-and-drop and install `.apk` files over wireless ADB.
+
+---
+
+## Release Bundles
+
+Pre-compiled binaries are published automatically to the **[Releases](https://github.com/eadxmz/ferrostb/releases)** page on every update:
+
+<p>
+  <img src="https://img.shields.io/badge/Windows%20x64-FerroSTB--Windows--Bundle.zip-0078D4?style=flat-square&logo=windows&logoColor=white" alt="Windows Bundle" />
+  <img src="https://img.shields.io/badge/Linux%20x64-FerroSTB--Linux--Bundle.zip%20%7C%20.tar.gz-FCC624?style=flat-square&logo=linux&logoColor=black" alt="Linux Bundle" />
+</p>
+
+| Bundle Archive | Target OS | Included Executables |
+| :--- | :--- | :--- |
+| **`FerroSTB-Windows-Bundle.zip`** | Windows 10 / 11 (`x86_64-pc-windows-msvc`) | `ferrostb.exe`, `ferrostb-toolbox.exe` |
+| **`FerroSTB-Linux-Bundle.zip`** / **`.tar.gz`** | Linux (`x86_64-unknown-linux-gnu`) | `ferrostb`, `ferrostb-toolbox` |
+
+---
 
 ## Core Provisioning Capabilities (`ferrostb`)
 
-* **Persistent Wireless ADB:** Enables network ADB debugging over TCP port `5555` (validity set through `2037`), runs a parallel TCP `:5555` detector, and persists global ADB flags across reboots.
+* **Wireless ADB Unlock:** Enables network ADB on TCP port `5555` with extended debug validity through `2037`.
+* **tvOS Launcher Installation & Permission Granting:** Sideloads **tvOS Launcher** (`com.techgenius.tvoslauncher`) and automatically configures `WRITE_SECURE_SETTINGS`, `PACKAGE_USAGE_STATS`, Location access, Notification Listener (`MediaWatchService`), Accessibility (`PowerService`), Device Admin (`SleepReceiver$Admin`), and battery optimization whitelist.
+* **Permanent Home Button Lock:** Force-stops, suspends, disables, and unbinds `com.jio.stb.screens`, `com.iwedia.ui.rjio.launcher.reliance`, and any dynamic Jio/Iwedia `CATEGORY_HOME` resolvers so the remote **Home** button never reverts to the stock interface.
+* **Shevery Privileged Service:** Sideloads `com.shevery` and grants `WRITE_SECURE_SETTINGS`, `DUMP`, `PACKAGE_USAGE_STATS`, background `appops`, and battery whitelist.
+* **Startup Boot Ad & Screensaver Purge:** Neutralizes `com.jio.stbadservice`, `com.jio.adc.aka`, `com.jio.adc.embedded`, `com.jio.bioscopecontentservice`, `com.jio.screensaver`, `com.jio.systemstats`, and `com.rjil.podlogservice`.
+* **Silent App Auto-Redownload & OTA Shield:** Strips `com.jio.httpupdate`, `com.jio.usbupdate`, `com.jio.fota`, `com.jio.stb.appstore`, `com.jio.stb.downloadmanager`, `com.rjil.jio.stb.commandreceiver`, `com.jio.backgroundscheduler`, and `com.iwedia.*` updaters so removed partner apps do not silently reinstall.
 
-* **tvOS Launcher Integration:** Sideloads `tvOS-Launcher.apk` (`com.techgenius.tvoslauncher`) and automatically grants `WRITE_SECURE_SETTINGS`, `PACKAGE_USAGE_STATS`, `SYSTEM_ALERT_WINDOW`, `ACCESS_FINE_LOCATION`, Notification Listener (`MediaWatchService`), Accessibility Service (`PowerService`), and Device Admin (`SleepReceiver$Admin`).
+---
 
-* **Permanent Home Button Lock:** Force-stops, clears, suspends, disables, and unbinds `com.jio.stb.screens` alongside Reliance's high-priority `com.iwedia.ui.rjio.launcher.reliance` home activity so pressing the remote's **Home** button never reverts to the stock interface.
+## Post-Unlock Management Utility (`ferrostb-toolbox`)
 
-* **Shevery Privileged API:** Installs `shevery-release.apk` (`com.shevery`) with full `WRITE_SECURE_SETTINGS`, `DUMP`, `PACKAGE_USAGE_STATS`, background `appops`, and Doze battery-whitelist exemptions.
+**FerroSTB Toolbox** is an interactive CLI utility with embedded platform-specific ADB binaries (`adb.exe` on Windows, official Google `adb` on Linux) for ongoing device customization:
 
-* **Boot Ad & Telemetry Purge:** Neutralizes `com.jio.stbadservice`, `com.jio.adc.aka`, `com.jio.adc.embedded`, `com.jio.bioscopecontentservice`, `com.jio.screensaver`, `com.jio.systemstats`, and `com.rjil.podlogservice`.
+| Option | Module | Function |
+| :--- | :--- | :--- |
+| **1** | **Wireless ADB Connect** | Auto-detects active LAN ADB sessions or connects to `<STB_IP>:5555` |
+| **2** | **APK Sideloader** | Installs single `.apk` files or batch-installs an entire directory of `.apk` files |
+| **3** | **Safe-Mode App Uninstaller** | Lists user/ADB apps (`-3`) or removable partner apps while protecting core Android OS, SSO, and Bluetooth remote packages |
+| **4** | **System Package Restore** | Scans unbound (`--user 0`) and disabled firmware packages and restores them via `cmd package install-existing` |
+| **5** | **Dynamic Launcher Switcher** | Discovers all installed `CATEGORY_HOME` launchers (or installs a new launcher `.apk`) and locks it as default Home |
+| **6** | **tvOS Launcher Supercharger** | Re-installs bundled `tvOS-Launcher.apk` and restores all privileged permissions, listeners, and admin rights |
+| **7** | **Home Button Lock** | Disables and unbinds all stock Jio and Iwedia home resolvers |
+| **8** | **Boot Ad & Promo Remover** | Removes startup video ads, ad injectors, and idle promo screensavers |
+| **9** | **Auto-Redownload Blocker** | Neutralizes silent background app installers and locks out unwanted partner apps (such as ETV or custom keywords) |
+| **10** | **Performance & RAM Booster** | Configures `0.5x` or `0.0x` animation scales, trims package caches, and clears background memory |
+| **11** | **Private DNS Switcher** | Sets Android 9+ DNS-over-TLS (`dns.adguard-dns.com`, `one.one.one.one`, `dns.google`, or Off) |
+| **12** | **APK Extractor / Backup** | Pulls installed user `.apk` packages from the STB into `apk_backups/` on your host machine |
+| **13** | **Remote Helper & Screenshot** | Launches hidden Android Settings / Developer Options on TV, sends keyboard text input, or captures a PNG screenshot |
+| **14** | **Power & Reboot Menu** | Triggers normal reboot, restarts wireless ADB (`tcpip 5555`), or boots into Recovery / Bootloader |
 
-* **Silent App Re-Download & OTA Blocker:** Disables and unbinds `com.jio.httpupdate`, `com.jio.usbupdate`, `com.jio.fota`, `com.jio.media.jstb.fota`, `com.jio.stb.appstore`, `com.jio.stb.downloadmanager`, `com.rjil.jio.stb.commandreceiver`, `com.jio.backgroundscheduler`, and `com.iwedia.*` update daemons so removed applications (such as ETV) cannot silently reinstall themselves.
-
-* **Cross-Platform Port & Firewall Automation:** Automatically frees UDP `:53` and UDP `:123` from conflicting system daemons (`SharedAccess` / `hns` / `w32time` on Windows; `systemd-resolved` / `systemd-timesyncd` on Linux) and configures temporary firewall rules on startup, restoring host services cleanly on exit.
-
-## Companion Utility: `ferrostb-toolbox`
-
-Packaged alongside `ferrostb` inside every Windows and Linux release bundle, **FerroSTB Toolbox** is a self-contained CLI control center with embedded ADB binaries (`adb.exe` + WinUSB DLLs on Windows; native `adb` binary on Linux) for ongoing device management:
-
-| Option | Module | Description | 
-| ----- | ----- | ----- | 
-| **1** | **Wireless ADB Connect** | Auto-detects active STB sessions or connects to `<STB_IP>:5555`. | 
-| **2** | **APK Sideloader** | Drag-and-drop installer for single `.apk` files or batch directories of `.apk` packages. | 
-| **3** | **Safe-Mode App Uninstaller** | Lists user/ADB packages (`-3`) or preloaded partner apps while strictly filtering out core Android, SSO, and Bluetooth remote packages. | 
-| **4** | **System Package Restore** | Diffs firmware packages (`pm list packages -u`) against active packages and restores unbound/disabled system apps via `cmd package install-existing`. | 
-| **5** | **Launcher Switcher** | Queries all installed `CATEGORY_HOME` activities (or installs a new launcher `.apk`) and locks the selected launcher as default Home. | 
-| **6** | **tvOS Launcher Supercharger** | Installs or repairs the bundled `tvOS-Launcher.apk` and re-applies all privileged permissions and services. | 
-| **7** | **Home Button Fix** | Scans and neutralizes all stock `com.jio.*` and `com.iwedia.*` Home resolvers so the Home key stays bound to your custom launcher. | 
-| **8** | **Boot Ad & Promo Remover** | Purges startup video ads, ad injectors, and idle promotional screensavers. | 
-| **9** | **Auto-Redownload Blocker** | Neutralizes silent background app pushers and locks out unwanted partner apps (`etv`, `eenadu`, or custom package keywords). | 
-| **10** | **Performance & RAM Booster** | Adjusts window/transition/animator scales (`0.5x` or `0.0x`), trims package caches, and frees background RAM. | 
-| **11** | **Private DNS Switcher** | Configures Android 9+ DNS-over-TLS (`dns.adguard-dns.com`, `one.one.one.one`, `dns.google`, or Off). | 
-| **12** | **APK Extractor / Backup** | Pulls the installed `.apk` binary of any user application from the STB to `apk_backups/` on the host machine. | 
-| **13** | **Remote Helper & Screenshot** | Launches hidden Stock Android Settings or Developer Options on the TV, types text from the host keyboard, or captures a 1080p PNG screenshot. | 
-| **14** | **Power & Reboot Menu** | Executes normal reboot, wireless ADB daemon restart (`tcpip 5555`), Recovery reboot, or Bootloader reboot. | 
+---
 
 ## System Architecture
 
-| Module | Protocol / Port | Technical Implementation | 
-| ----- | ----- | ----- | 
-| **`src/assets.rs`** | In-Memory | Compile-time embedding (`include_bytes!`) of platform-native `adb` binaries, `acs_chain.pem`, `tvOS-Launcher.apk`, and `shevery-release.apk`. | 
-| **`src/main.rs`** | Win32 / POSIX | Evicts conflicting UDP `:53` / `:123` services (`SharedAccess` on Windows; `systemd-resolved` on Linux), binds with `SO_REUSEADDR`, applies firewall rules, and runs a parallel TCP `:5555` watcher. | 
-| **`src/dns.rs`** | `UDP :53` | Selective DNS spoofer routing `acs.oss.jio.com`, NTP, and connectivity checks to the host LAN IPv4 address while returning `NXDOMAIN` to unrelated traffic. | 
-| **`src/ntp.rs`** | `UDP :123` | RFC-compliant NTPv4 daemon synchronizing the STB's cold-boot clock (`1970`) to current UTC time so X.509 certificate and `DebugValidityDate` validations succeed. | 
-| **`src/captive.rs`** | `TCP :80` | Lightweight HTTP server returning `HTTP/1.1 204 No Content` while the router's WAN fiber is unplugged so Android marks the LAN connection as online. | 
-| **`src/cwmp.rs`** | `TCP :443, :7443, :8443, :9443` | Stateless OpenSSL (`DEFAULT:@SECLEVEL=0`) TR-069 ACS engine supporting `/common/v1/network/check` spoofing, dynamic SOAP namespace mirroring, shallow parameter discovery (`GetParameterNames`), and isolated single-parameter `SetParameterValues` RPCs. | 
-| **`src/adb.rs`** | `TCP :5555` | Automated ADB provisioner executing package installations, permission grants, stock launcher neutralization, and bloatware removal. | 
-| **`src/toolbox.rs`** | `TCP :5555` | Interactive post-provisioning CLI management suite (`ferrostb-toolbox`). | 
+| Component | Port / Protocol | Implementation Details |
+| :--- | :--- | :--- |
+| **Asset Embedder (`src/assets.rs`)** | Compile-Time | Embeds platform ADB binaries, `tls/acs_chain.pem`, `tvOS-Launcher.apk`, and `shevery-release.apk` |
+| **Host Network & Firewall (`src/main.rs`)** | OS Native | Evicts conflicting port `:53` daemons (`SharedAccess`/`hns` on Windows; `systemd-resolved` on Linux) and configures temporary firewall rules |
+| **Selective DNS Spoofer (`src/dns.rs`)** | `UDP :53` | Redirects `acs.oss.jio.com`, NTP, and connectivity checks to the host LAN IP while returning `NXDOMAIN` to unrelated traffic |
+| **NTP Time Daemon (`src/ntp.rs`)** | `UDP :123` | Syncs the STB cold-boot clock (`1970`) to current UTC so TLS certificate chains and debug validity checks succeed |
+| **Captive Portal Spoofer (`src/captive.rs`)** | `TCP :80` | Returns `HTTP/1.1 204 No Content` while upstream WAN/fiber is disconnected so Android TV keeps Wi-Fi active |
+| **Stateless CWMP Server (`src/cwmp.rs`)** | `TCP :443, :7443, :8443, :9443` | OpenSSL (`@SECLEVEL=0` + `RILROOTCA`) server with `/common/v1/network/check` spoofing, shallow tree discovery, and atomic 1-parameter RPCs |
+| **Parallel ADB Provisioner (`src/adb.rs`)** | `TCP :5555` | Polls port `5555` concurrently with CWMP, deploys APKs, locks default Home, and purges bloatware |
+
+---
 
 ## Prerequisites
 
-No external runtimes (Docker, Python, Node.js, or Technitium DNS) are required:
+1. **A Windows 10/11 or Linux (`x86_64`) PC** connected to the same router as your Jio STB.
+2. **Release Bundle** from the **[Releases](https://github.com/eadxmz/ferrostb/releases)** page (`FerroSTB-Windows-Bundle.zip` or `FerroSTB-Linux-Bundle.zip` / `.tar.gz`).
+3. **Any empty USB flash drive** (used briefly in Step 3 to open the hidden stock Android Settings menu on the STB).
 
-1. **Host Computer:** A **Windows 10 / 11 PC** or **Linux (`x86_64`)** machine connected to the same router as your Jio Set-Top Box.
+---
 
-2. **Release Bundle:** Download the latest bundle from the [**Releases**](../../releases) tab:
-
-   *  **`FerroSTB-Windows-Bundle.zip`** (`ferrostb.exe` + `ferrostb-toolbox.exe`)
-
-   *  **`FerroSTB-Linux-Bundle.zip`** or **`FerroSTB-Linux-Bundle.tar.gz`** (`ferrostb` + `ferrostb-toolbox`)
-
-3. **USB Flash Drive:** Any empty USB thumb drive (used briefly in Step 3 to open the native Android Storage Manager and access hidden network settings).
-
-## Step-by-Step Provisioning Guide
+## Step-by-Step Setup Guide
 
 ### Step 1: Network Pairing
 
-1. Connect your Windows or Linux host machine to your primary home Wi-Fi (or Ethernet on the same router).
+1. Connect both your Windows/Linux PC and your Jio STB to the **same primary home router**.
+2. Do not use **Guest Wi-Fi**, as client isolation blocks LAN communication between devices.
 
-2. Connect your Jio STB to the same router.
+---
 
-3. Do not use a Guest Wi-Fi network (AP isolation prevents local device-to-device traffic).
+### Step 2: Find Your Host PC LAN IPv4 Address
 
-### Step 2: Identify Your Host IPv4 Address
+* **On Windows (`cmd`):**
+  ```cmd
+  ipconfig
+  ```
+  Note the **IPv4 Address** under your active Wi-Fi or Ethernet adapter (for example, `192.168.31.52`).
 
-* **On Windows:**
+* **On Linux (Terminal):**
+  ```bash
+  ip -4 addr show
+  ```
+  Note the `inet` IPv4 address under your active `wlan0` or `eth0` interface (for example, `192.168.31.52`).
 
-  1. Press `Win + R`, type `cmd`, and press **Enter**.
+---
 
-  2. Run `ipconfig` and note the **IPv4 Address** under your active Wi-Fi or Ethernet adapter (for example, `192.168.31.52`).
+### Step 3: Configure STB Static DNS via USB Storage Breakout
 
-* **On Linux:**
-
-  1. Open a terminal and run:
-
-     ```
-     ip -4 addr show scope global
-     
-     ```
-
-  2. Note the `inet` IPv4 address on your active LAN/Wi-Fi interface (for example, `192.168.31.52`).
-
-### Step 3: Point STB Static DNS to Your Host (USB Storage Breakout)
-
-> \[!NOTE\]
-> The stock Jio interface hides advanced DNS configuration. Inserting any USB thumb drive allows you to open Android's native Storage Manager and launch the underlying AOSP Settings application.
-
-1. Insert any USB flash drive into a USB port on the Jio STB.
-
-2. Power on the STB $\rightarrow$ Open **My Music** $\rightarrow$ Navigate to **Settings** $\rightarrow$ Select **Eject USB**.
-
-3. Select **Internal Storage** $\rightarrow$ Open **Apps** $\rightarrow$ Select the system **Settings** application (gear icon) $\rightarrow$ Select **Open**.
-
-4. Navigate to **Network & Internet** $\rightarrow$ Select your active Wi-Fi network $\rightarrow$ Open **IP Settings** (or **Advanced IP Settings**).
-
-5. Note your STB's current DHCP **IP Address** (e.g., `192.168.31.181`) and **Gateway** (e.g., `192.168.31.1`).
-
-6. Switch **IP Settings** from **DHCP** to **Static** and enter:
-
-   * **IP Address:** Your STB's current LAN IP (overwrite the default `192.168.1.128` placeholder if cleared).
-
-   * **Gateway:** Your router's LAN gateway IP (e.g., `192.168.31.1`).
-
+1. Insert any **empty USB flash drive** into the Jio STB USB port.
+2. On the STB, open **My Music** $\rightarrow$ **Settings** $\rightarrow$ **Eject USB**.
+3. Select **Internal Storage** $\rightarrow$ **Apps** $\rightarrow$ **Settings** (gear icon) $\rightarrow$ **Open**.
+4. Go to **Network & Internet** $\rightarrow$ select your connected Wi-Fi network $\rightarrow$ open **IP Settings** (or **Advanced IP Settings**).
+5. Note the STB's current **IP Address** (e.g., `192.168.31.181`) and **Gateway** (e.g., `192.168.31.1`) before changing modes.
+6. Switch **IP Settings** from **DHCP** to **Static**:
+   * **IP Address:** Enter the STB's existing LAN IP (overwrite any gray placeholder such as `192.168.1.128`).
+   * **Gateway:** Enter your router's gateway IP (e.g., `192.168.31.1`).
    * **Network prefix length:** `24`
+   * **DNS 1:** Enter your **Host PC IPv4 Address** from Step 2 (e.g., `192.168.31.52`).
+   * **DNS 2:** Enter the same **Host PC IPv4 Address** so DNS queries cannot leak upstream.
+7. Save the configuration and verify the STB reconnects to Wi-Fi.
 
-   * **DNS 1:** Your **Host PC's IPv4 Address** from Step 2 (e.g., `192.168.31.52`).
+> [!WARNING]
+> If Android clears the IP or Gateway fields and displays placeholder text (`192.168.1.128`) after switching to Static, enter your real subnet IP and Gateway manually so the STB stays on your router's subnet.
 
-   * **DNS 2:** Your **Host PC's IPv4 Address** (e.g., `192.168.31.52`).
+---
 
-7. Save the configuration and confirm Wi-Fi reconnects.
+### Step 4: Isolate WAN / Fiber Connection
 
-### Step 4: Isolate Router WAN Fiber
+1. Unplug the **incoming fiber-optic or WAN Ethernet cable** from the back of your router.
+2. Keep the router **powered ON** so local Wi-Fi traffic between your PC and the STB continues uninterrupted without reaching external ACS servers.
 
-1. Unplug the **incoming fiber-optic patch cable** (or WAN Ethernet cable) from your router so the STB cannot reach upstream servers.
-
-2. **Keep the Wi-Fi router powered ON** so local LAN traffic flows between the STB and your host machine.
-
-3. If you run a strict third-party firewall (`firewalld`, `iptables`, or Windows security suites), temporarily allow inbound traffic on UDP `53, 123` and TCP `80, 443, 7443, 8443, 9443`.
+---
 
 ### Step 5: Launch `ferrostb` & Cold-Reboot the STB
 
 * **On Windows:**
-  Extract `FerroSTB-Windows-Bundle.zip`, right-click **`ferrostb.exe`**, and select **Run as administrator**.
+  1. Extract `FerroSTB-Windows-Bundle.zip`.
+  2. Right-click **`ferrostb.exe`** and select **Run as administrator**.
 
 * **On Linux:**
-  Extract `FerroSTB-Linux-Bundle.tar.gz` (or `.zip`), make the binaries executable, and run with `sudo` (required to bind privileged ports `53`, `80`, `123`, and `443`):
+  1. Extract `FerroSTB-Linux-Bundle.tar.gz` (or `.zip`):
+     ```bash
+     tar -xzf FerroSTB-Linux-Bundle.tar.gz && cd FerroSTB-Linux-Bundle
+     sudo ./ferrostb
+     ```
 
-  ```
-  tar -xzf FerroSTB-Linux-Bundle.tar.gz
-  cd FerroSTB-Linux-Bundle
-  chmod +x ferrostb ferrostb-toolbox
-  sudo ./ferrostb
-  
-  ```
+Once the console displays:
 
-Once all listeners report ready:
-
-```
+```text
 [READY] ALL SERVERS LISTENING!
 >>> Unplug the Jio STB power cord, wait 5s, and plug in.
-
 ```
 
-**Cold Power-Cycle the STB:**
+Perform a **cold power cycle** on the Jio STB:
+1. Unplug the power barrel connector from the back of the STB.
+2. Wait **5 full seconds** and plug it back in.
+3. `ferrostb` will intercept DNS, sync NTP time, pass the Captive Portal check, execute the TR-069 CWMP sequence, and connect to ADB on port `5555`.
 
-1. Unplug the power cable from the back of the Jio STB (do not use the remote standby button).
+---
 
-2. Wait **5 seconds**, then plug the power cable back in.
+### Step 6: Approve USB Debugging on TV
 
-3. `ferrostb` will automatically spoof DNS (`:53`), synchronize NTP time (`:123`), pass the Captive Portal check (`:80`), execute TR-069 CWMP unlocking (`:9443`), and initiate wireless ADB provisioning (`:5555`).
+When the **"Allow USB Debugging?"** prompt appears on your TV screen:
+1. Check **Always allow from this computer**.
+2. Select **OK / Allow** using your remote.
 
-### Step 6: Authorize USB Debugging on the TV Screen
+`ferrostb` will complete the installation of **tvOS Launcher** and **Shevery**, disable stock Jio launchers and boot ads, block silent app re-downloads, and launch **tvOS Launcher**.
 
-1. Once `ferrostb` connects to port `5555`, an **"Allow USB Debugging?"** prompt will appear on your TV.
+---
 
-2. Check **"Always allow from this computer"** and select **OK / Allow** using the remote.
-
-3. `ferrostb` will finish installing **tvOS Launcher** and **Shevery**, lock the Home button, strip boot ads and OTA daemons, and launch directly into **tvOS Launcher**.
-
-### Step 7: Restore WAN Connectivity & Manage with `ferrostb-toolbox`
+### Step 7: Restore Internet & Customize with `ferrostb-toolbox`
 
 1. Reconnect the **fiber-optic / WAN cable** to your router.
+2. On the Jio STB, change Wi-Fi **IP Settings** back from **Static** to **DHCP**.
+3. Run **`ferrostb-toolbox.exe`** (Windows) or **`./ferrostb-toolbox`** (Linux) whenever you want to sideload `.apk` files, switch launchers, remove or restore packages, or tune system settings.
 
-2. On the Jio STB, switch Wi-Fi **IP Settings** from **Static** back to **DHCP**.
+---
 
-3. Run **`ferrostb-toolbox.exe`** (Windows) or **`./ferrostb-toolbox`** (Linux) whenever you want to sideload additional `.apk` files, switch launchers, block unwanted packages, or restore unbound system apps.
+## Building from Source
+
+To compile both binaries locally using Cargo:
+
+```bash
+cargo build --release
+```
+
+Output binaries are generated at `target/release/ferrostb` (`.exe`) and `target/release/ferrostb-toolbox` (`.exe`).
+
+---
 
 ## Disclaimer
 
-* **Scope:** This software modifies device configuration via TR-069 and ADB, including enabling wireless debugging, installing custom launchers and privileged management tools, and disabling/unbinding stock launcher, telemetry, OTA, and advertising packages.
-
-* **Authorization:** Use strictly on hardware you personally own or are explicitly authorized to modify.
+This software is provided for educational and personal device administration purposes on hardware you own or have explicit authorization to manage. See the [LICENSE](LICENSE) file for full license terms.

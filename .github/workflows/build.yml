@@ -21,6 +21,11 @@ jobs:
         with:
           targets: x86_64-pc-windows-msvc
 
+      - name: Cache Rust dependencies and build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: windows-msvc
+
       - name: Build Windows binaries (ferrostb.exe & ferrostb-toolbox.exe)
         run: cargo build --release --target x86_64-pc-windows-msvc
 
@@ -56,6 +61,11 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-unknown-linux-gnu
+
+      - name: Cache Rust dependencies and build artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: linux-gnu
 
       - name: Build Linux binaries (ferrostb & ferrostb-toolbox)
         run: cargo build --release --target x86_64-unknown-linux-gnu
