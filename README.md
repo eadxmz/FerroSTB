@@ -1,10 +1,10 @@
 # FerroSTB & FerroSTB Toolbox
 
-**Zero-Dependency Native Rust TR-069 Provisioner, Ad-Blocker & Post-Unlock Management Suite for Jio Set-Top Boxes (Windows & Linux)**
+**Zero-Dependency Native Rust TR-069 Provisioner, Ad-Blocker & Post-Unlock Management Suite for Jio Set-Top Boxes**
 
 ## Overview
 
-**FerroSTB** is a standalone, ground-up Rust provisioning engine (`ferrostb` / `ferrostb.exe`) paired with an interactive post-unlock management utility (`ferrostb-toolbox` / `ferrostb-toolbox.exe`). It eliminates legacy multi-container stacks (Docker, MongoDB, Node.js, Python proxies, and external DNS daemons) by compiling the entire network spoofing, TR-069 CWMP TLS server, and ADB provisioning pipeline into native Windows and Linux executables with all runtime payloads embedded directly in memory.
+**FerroSTB** is a standalone, ground-up Rust provisioning engine (`ferrostb` / `ferrostb.exe`) paired with an interactive post-unlock management utility (`ferrostb-toolbox` / `ferrostb-toolbox.exe`). It eliminates legacy multi-container stacks (Docker, MongoDB, Node.js, Python proxies, and external DNS daemons) by compiling the entire network spoofing, TR-069 CWMP TLS server, and ADB provisioning pipeline into native **Windows** and **Linux** executables with all runtime payloads embedded directly in memory.
 
 > \[!NOTE\]
 > **Supported Hardware & Firmware**
@@ -84,9 +84,9 @@ No external runtimes (Docker, Python, Node.js, or Technitium DNS) are required:
 
 2. **Release Bundle:** Download the latest bundle from the [**Releases**](../../releases) tab:
 
-   * **Windows:** `FerroSTB-Windows-Bundle.zip` (contains `ferrostb.exe` and `ferrostb-toolbox.exe`)
+   *  **`FerroSTB-Windows-Bundle.zip`** (`ferrostb.exe` + `ferrostb-toolbox.exe`)
 
-   * **Linux:** `FerroSTB-Linux-Bundle.zip` or `FerroSTB-Linux-Bundle.tar.gz` (contains `ferrostb` and `ferrostb-toolbox`)
+   *  **`FerroSTB-Linux-Bundle.zip`** or **`FerroSTB-Linux-Bundle.tar.gz`** (`ferrostb` + `ferrostb-toolbox`)
 
 3. **USB Flash Drive:** Any empty USB thumb drive (used briefly in Step 3 to open the native Android Storage Manager and access hidden network settings).
 
