@@ -1,4 +1,3 @@
-<meta name="google-site-verification" content="MaVQ2cxY_rA5ceQ1S11ZfUVQKySnW6USihEOHRvCNXI" />
 <div align="center">
 
 # FerroSTB & FerroSTB Toolbox
