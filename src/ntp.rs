@@ -1,12 +1,13 @@
-use std::sync::atomic::{AtomicBool, Ordering};
+use crate::logger::AppState;
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::net::UdpSocket;
 
 const NTP_EPOCH_DELTA: u64 = 2_208_988_800;
-static LOGGED_NTP: AtomicBool = AtomicBool::new(false);
 
-pub async fn run_ntp_server(socket: UdpSocket) {
+pub async fn run_ntp_server(socket: UdpSocket, app: Arc<AppState>) {
     let mut buf = [0u8; 48];
+    let mut logged = false;
     loop {
         let (len, peer) = match socket.recv_from(&mut buf).await {
             Ok(res) => res,
@@ -37,8 +38,16 @@ pub async fn run_ntp_server(socket: UdpSocket) {
         resp[44..48].copy_from_slice(&frac.to_be_bytes());
 
         let _ = socket.send_to(&resp, peer).await;
-        if !LOGGED_NTP.swap(true, Ordering::Relaxed) {
-            println!("[NTP:123] Synced STB clock for {} to current 2026 UTC time", peer.ip());
+        if !logged {
+            logged = true;
+            if let Ok(mut st) = app.inner.lock() {
+                st.ntp_synced = true;
+            }
+            app.log(
+                "NTP",
+                "ok",
+                format!("Synced STB clock for {} to current UTC time", peer.ip()),
+            );
         }
     }
 }

@@ -16,20 +16,15 @@ pub const ADB_LINUX: &[u8] = include_bytes!("../adb_linux");
 pub const TVOS_LAUNCHER_APK: &[u8] = include_bytes!("../tvOS-Launcher.apk");
 pub const SHEVERY_APK: &[u8] = include_bytes!("../shevery-release.apk");
 
-#[allow(dead_code)]
 pub const ACS_CHAIN_PEM: &[u8] = include_bytes!("../tls/acs_chain.pem");
-#[allow(dead_code)]
 pub const FORGED_CHAIN_PEM: &[u8] = include_bytes!("../tls/forged_chain.pem");
+pub const UI_INDEX_HTML: &str = include_str!("../ui/index.html");
 
-#[allow(dead_code)]
 fn is_valid_pem_bundle(bytes: &[u8]) -> bool {
     let text = String::from_utf8_lossy(bytes);
     text.contains("-----BEGIN CERTIFICATE-----") && text.contains("PRIVATE KEY-----")
 }
 
-/// Loads the JHS (JHSB200 / JHSC200 / JHSD200) eMudhra TLS chain.
-/// Checks external files next to the binary / CWD first, then falls back to the embedded copy.
-#[allow(dead_code)]
 pub fn load_jhs_forged_chain() -> Option<(Vec<u8>, String)> {
     let mut candidates: Vec<PathBuf> = Vec::new();
 
@@ -97,7 +92,9 @@ pub fn extract_adb_only() -> Result<PathBuf> {
     {
         if ADB_LINUX.len() > 1024 {
             let path = work_dir.join("adb");
-            let _ = fs::write(&path, ADB_LINUX);
+            if !path.exists() {
+                let _ = fs::write(&path, ADB_LINUX);
+            }
             #[cfg(unix)]
             {
                 use std::os::unix::fs::PermissionsExt;
@@ -113,7 +110,6 @@ pub fn extract_adb_only() -> Result<PathBuf> {
     Ok(work_dir)
 }
 
-#[allow(dead_code)]
 pub fn extract_runtime_assets() -> Result<PathBuf> {
     let work_dir = extract_adb_only()?;
 

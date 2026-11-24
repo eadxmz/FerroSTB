@@ -1,4 +1,4 @@
-name: Build & Release FerroSTB (Windows & Linux)
+name: Build & Release FerroSTB v1.0.0 (Unified GUI Suite)
 
 on:
   push:
@@ -26,22 +26,21 @@ jobs:
         with:
           key: windows-msvc
 
-      - name: Build Windows binaries (ferrostb.exe & ferrostb-toolbox.exe)
+      - name: Build Unified Windows Binary (ferrostb.exe)
         run: cargo build --release --target x86_64-pc-windows-msvc
 
-      - name: Package FerroSTB-Windows-Bundle.zip
+      - name: Package FerroSTB-Windows-v1.0.0.zip
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path dist/FerroSTB-Windows-Bundle | Out-Null
-          Copy-Item target/x86_64-pc-windows-msvc/release/ferrostb.exe dist/FerroSTB-Windows-Bundle/
-          Copy-Item target/x86_64-pc-windows-msvc/release/ferrostb-toolbox.exe dist/FerroSTB-Windows-Bundle/
-          Compress-Archive -Path dist/FerroSTB-Windows-Bundle/* -DestinationPath dist/FerroSTB-Windows-Bundle.zip -Force
+          New-Item -ItemType Directory -Force -Path dist/FerroSTB-Windows | Out-Null
+          Copy-Item target/x86_64-pc-windows-msvc/release/ferrostb.exe dist/FerroSTB-Windows/
+          Compress-Archive -Path dist/FerroSTB-Windows/* -DestinationPath dist/FerroSTB-Windows-v1.0.0.zip -Force
 
-      - name: Upload Windows Bundle Artifact
+      - name: Upload Windows Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: FerroSTB-Windows-Bundle
-          path: dist/FerroSTB-Windows-Bundle.zip
+          name: FerroSTB-Windows-v1.0.0
+          path: dist/FerroSTB-Windows-v1.0.0.zip
 
   build-linux:
     runs-on: ubuntu-latest
@@ -67,26 +66,25 @@ jobs:
         with:
           key: linux-gnu
 
-      - name: Build Linux binaries (ferrostb & ferrostb-toolbox)
+      - name: Build Unified Linux Binary (ferrostb)
         run: cargo build --release --target x86_64-unknown-linux-gnu
 
-      - name: Package FerroSTB-Linux-Bundle (.zip & .tar.gz)
+      - name: Package FerroSTB-Linux-v1.0.0 (.zip & .tar.gz)
         run: |
-          mkdir -p dist/FerroSTB-Linux-Bundle
-          cp target/x86_64-unknown-linux-gnu/release/ferrostb dist/FerroSTB-Linux-Bundle/
-          cp target/x86_64-unknown-linux-gnu/release/ferrostb-toolbox dist/FerroSTB-Linux-Bundle/
-          chmod +x dist/FerroSTB-Linux-Bundle/ferrostb dist/FerroSTB-Linux-Bundle/ferrostb-toolbox
+          mkdir -p dist/FerroSTB-Linux
+          cp target/x86_64-unknown-linux-gnu/release/ferrostb dist/FerroSTB-Linux/
+          chmod +x dist/FerroSTB-Linux/ferrostb
           cd dist
-          tar -czf FerroSTB-Linux-Bundle.tar.gz FerroSTB-Linux-Bundle/
-          zip -r FerroSTB-Linux-Bundle.zip FerroSTB-Linux-Bundle/
+          tar -czf FerroSTB-Linux-v1.0.0.tar.gz FerroSTB-Linux/
+          zip -r FerroSTB-Linux-v1.0.0.zip FerroSTB-Linux/
 
-      - name: Upload Linux Bundle Artifact
+      - name: Upload Linux Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: FerroSTB-Linux-Bundle
+          name: FerroSTB-Linux-v1.0.0
           path: |
-            dist/FerroSTB-Linux-Bundle.zip
-            dist/FerroSTB-Linux-Bundle.tar.gz
+            dist/FerroSTB-Linux-v1.0.0.zip
+            dist/FerroSTB-Linux-v1.0.0.tar.gz
 
   publish-release:
     needs: [build-windows, build-linux]
@@ -101,16 +99,17 @@ jobs:
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.8.0
-          name: "FerroSTB v0.8.0 — Universal JHS (JHSB200/JHSC200/JHSD200) & JMS Suite"
+          tag_name: v1.0.0
+          name: "FerroSTB v1.0.0 — Unified Cosmic-Violet GUI Suite (Provisioner + Toolbox + ADB Shell)"
           body: |
-            ### FerroSTB v0.8.0 Release Bundles
-            * **Added Full JHS Series Support (`JHSB200`, `JHSC200`, `JHSD200` / JioOS 2.0):** eMudhra System CA chain (`forged_chain.pem`), `Device.JioSTB.*` TR-069 tree, `*.jiostb.com` DNS spoofing, Iwedia 4-service OTA freeze, and `com.jio.tr069client` reboot-ADB protection.
-            * **`FerroSTB-Windows-Bundle.zip`**: Standalone `ferrostb.exe` & `ferrostb-toolbox.exe` for Windows 10/11 (Run as Administrator).
-            * **`FerroSTB-Linux-Bundle.zip` / `.tar.gz`**: Standalone `ferrostb` & `ferrostb-toolbox` for Linux x86_64 (`sudo ./ferrostb`).
+            ### FerroSTB v1.0.0 — Single Unified Executable
+            * **All-in-One UI:** Provisioner (JHSB200/JHSC200/JHSD200 & JMS), Visual App Manager, Drag-and-Drop APK Sideloader, Launcher & Boot-Ad Shield, Performance Tweaks, and **Advanced Mode ADB Terminal** bundled inside one binary.
+            * **Diagnostic Logs:** Live 5-stage pipeline with pinpointed error diagnostics and one-click recovery guidance.
+            * **`FerroSTB-Windows-v1.0.0.zip`**: Single `ferrostb.exe` for Windows 10/11 (Run as Administrator).
+            * **`FerroSTB-Linux-v1.0.0.zip` / `.tar.gz`**: Single `ferrostb` for Linux x86_64 (`sudo ./ferrostb`).
           draft: false
           prerelease: false
           files: |
-            release_assets/FerroSTB-Windows-Bundle.zip
-            release_assets/FerroSTB-Linux-Bundle.zip
-            release_assets/FerroSTB-Linux-Bundle.tar.gz
+            release_assets/FerroSTB-Windows-v1.0.0.zip
+            release_assets/FerroSTB-Linux-v1.0.0.zip
+            release_assets/FerroSTB-Linux-v1.0.0.tar.gz

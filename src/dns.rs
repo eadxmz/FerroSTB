@@ -1,5 +1,7 @@
+use crate::logger::AppState;
 use std::collections::HashSet;
 use std::net::{IpAddr, Ipv4Addr};
+use std::sync::Arc;
 use tokio::net::UdpSocket;
 use tokio::sync::watch;
 
@@ -8,6 +10,7 @@ pub async fn run_dns_server(
     host_ip: Ipv4Addr,
     ntp_active: bool,
     stb_tx: watch::Sender<Option<IpAddr>>,
+    app: Arc<AppState>,
 ) {
     let mut buf = [0u8; 512];
     let mut logged_domains: HashSet<String> = HashSet::new();
@@ -31,6 +34,11 @@ pub async fn run_dns_server(
                     false
                 }
             });
+            if let Ok(mut st) = app.inner.lock() {
+                if st.detected_stb_ip.is_none() {
+                    st.detected_stb_ip = Some(peer.ip().to_string());
+                }
+            }
         }
 
         let qname = parse_qname(&buf[12..len]).to_ascii_lowercase();
@@ -40,8 +48,16 @@ pub async fn run_dns_server(
         }
 
         if should_spoof(&qname) {
+            if let Ok(mut st) = app.inner.lock() {
+                st.dns_spoof_count += 1;
+            }
+            app.set_step(2, "STB DNS & Clock Sync Active");
             if logged_domains.insert(qname.clone()) {
-                println!("[DNS] Spoofed '{}' -> {} (for STB {})", qname, host_ip, peer.ip());
+                app.log(
+                    "DNS",
+                    "ok",
+                    format!("Spoofed '{}' -> {} (STB {})", qname, host_ip, peer.ip()),
+                );
             }
             if let Some(resp) = build_dns_response(&buf[..len], host_ip) {
                 let _ = socket.send_to(&resp, peer).await;
@@ -50,7 +66,11 @@ pub async fn run_dns_server(
             if (qname.contains("jio") || qname.contains("iwedia") || qname.contains("bluebank"))
                 && logged_ignored.insert(qname.clone())
             {
-                println!("[DNS] Blocked (NXDOMAIN) '{}' from STB {}", qname, peer.ip());
+                app.log(
+                    "DNS",
+                    "info",
+                    format!("Blocked (NXDOMAIN) '{}' from STB {}", qname, peer.ip()),
+                );
             }
             if let Some(resp) = build_nxdomain_response(&buf[..len]) {
                 let _ = socket.send_to(&resp, peer).await;

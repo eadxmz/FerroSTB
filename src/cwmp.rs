@@ -1,3 +1,4 @@
+use crate::logger::AppState;
 use anyhow::Result;
 use flate2::read::GzDecoder;
 use openssl::pkey::PKey;
@@ -8,15 +9,14 @@ use std::io::Read;
 use std::net::IpAddr;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpListener;
 use tokio::sync::watch;
+use tokio::task::JoinHandle;
 use tokio_openssl::SslStream;
 
 const PRECOMPUTED_NETCHECK: &str = "UzLgdFHvJkBfRQiHnNQit+55dub3o1PbxIhuNZ7oJc8=";
-
-static SESSION_COMPLETE: AtomicBool = AtomicBool::new(false);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StbFamily {
@@ -59,10 +59,10 @@ struct EngineState {
     rpc_counter: usize,
 }
 
-impl Default for EngineState {
-    fn default() -> Self {
+impl EngineState {
+    fn new(family: StbFamily) -> Self {
         Self {
-            family: StbFamily::Jhs,
+            family,
             dialect: SoapDialect::default(),
             queue: VecDeque::new(),
             discovered_vendor_branches: Vec::new(),
@@ -73,22 +73,14 @@ impl Default for EngineState {
     }
 }
 
-fn engine_state() -> &'static Mutex<EngineState> {
-    static STATE: OnceLock<Mutex<EngineState>> = OnceLock::new();
-    STATE.get_or_init(|| Mutex::new(EngineState::default()))
-}
-
 pub async fn run_cwmp_servers(
     family: StbFamily,
     cert_pem: Vec<u8>,
     cert_label: &str,
     stb_ip_tx: watch::Sender<Option<IpAddr>>,
     stb_done_tx: watch::Sender<Option<IpAddr>>,
-) -> Result<()> {
-    if let Ok(mut st) = engine_state().lock() {
-        st.family = family;
-    }
-
+    app: Arc<AppState>,
+) -> Result<Vec<JoinHandle<()>>> {
     let certs = X509::stack_from_pem(&cert_pem)?;
     let pkey = PKey::private_key_from_pem(&cert_pem)?;
 
@@ -106,59 +98,96 @@ pub async fn run_cwmp_servers(
     builder.set_private_key(&pkey)?;
     let acceptor = Arc::new(builder.build());
 
+    let engine = Arc::new(Mutex::new(EngineState::new(family)));
+    let session_complete = Arc::new(AtomicBool::new(false));
+    let mut handles = Vec::new();
+    let mut bound_any = false;
+
     for port in [8443u16, 9443, 7443, 443] {
-        if let Ok(listener) = TcpListener::bind(("0.0.0.0", port)).await {
-            println!("[CWMP-TLS] Listening on 0.0.0.0:{} ({})", port, cert_label);
-            let acc = acceptor.clone();
-            let ip_tx = stb_ip_tx.clone();
-            let done_tx = stb_done_tx.clone();
-            tokio::spawn(async move {
-                loop {
-                    if let Ok((tcp, peer)) = listener.accept().await {
-                        let acc = acc.clone();
-                        let ip_tx = ip_tx.clone();
-                        let done_tx = done_tx.clone();
-                        tokio::spawn(async move {
-                            if !peer.ip().is_loopback() {
-                                let _ = ip_tx.send_if_modified(|curr| {
-                                    if curr.is_none() {
-                                        *curr = Some(peer.ip());
-                                        true
-                                    } else {
-                                        false
-                                    }
-                                });
-                            }
-                            if let Ok(ssl) = Ssl::new(acc.context()) {
-                                if let Ok(mut tls_stream) = SslStream::new(ssl, tcp) {
-                                    match Pin::new(&mut tls_stream).accept().await {
-                                        Ok(()) => {
-                                            handle_http_session(tls_stream, peer.ip(), port, done_tx).await;
+        match TcpListener::bind(("0.0.0.0", port)).await {
+            Ok(listener) => {
+                bound_any = true;
+                app.log("CWMP", "ok", format!("TLS server listening on :{} ({})", port, cert_label));
+                let acc = acceptor.clone();
+                let ip_tx = stb_ip_tx.clone();
+                let done_tx = stb_done_tx.clone();
+                let eng = engine.clone();
+                let done_flag = session_complete.clone();
+                let app_c = app.clone();
+
+                let handle = tokio::spawn(async move {
+                    loop {
+                        if let Ok((tcp, peer)) = listener.accept().await {
+                            let acc = acc.clone();
+                            let ip_tx = ip_tx.clone();
+                            let done_tx = done_tx.clone();
+                            let eng = eng.clone();
+                            let done_flag = done_flag.clone();
+                            let app_conn = app_c.clone();
+                            tokio::spawn(async move {
+                                if !peer.ip().is_loopback() {
+                                    let _ = ip_tx.send_if_modified(|curr| {
+                                        if curr.is_none() {
+                                            *curr = Some(peer.ip());
+                                            true
+                                        } else {
+                                            false
                                         }
-                                        Err(e) => {
-                                            if port == 8443 || port == 9443 {
-                                                eprintln!(
-                                                    "[CWMP:{}] TLS handshake rejected by {}: {}",
-                                                    port,
+                                    });
+                                    if let Ok(mut st) = app_conn.inner.lock() {
+                                        if st.detected_stb_ip.is_none() {
+                                            st.detected_stb_ip = Some(peer.ip().to_string());
+                                        }
+                                    }
+                                }
+                                if let Ok(ssl) = Ssl::new(acc.context()) {
+                                    if let Ok(mut tls_stream) = SslStream::new(ssl, tcp) {
+                                        match Pin::new(&mut tls_stream).accept().await {
+                                            Ok(()) => {
+                                                if let Ok(mut st) = app_conn.inner.lock() {
+                                                    st.cwmp_connected = true;
+                                                }
+                                                app_conn.set_step(3, "TR-069 CWMP Handshake Established");
+                                                handle_http_session(
+                                                    tls_stream,
                                                     peer.ip(),
-                                                    e
-                                                );
-                                                eprintln!(
-                                                    "           -> Tip: Ensure you selected the right STB family (JHS needs eMudhra forged_chain.pem; JMS needs acs_chain.pem)."
-                                                );
+                                                    port,
+                                                    done_tx,
+                                                    eng,
+                                                    done_flag,
+                                                    app_conn,
+                                                )
+                                                .await;
+                                            }
+                                            Err(e) => {
+                                                if port == 8443 || port == 9443 {
+                                                    let msg = format!("Port :{} rejected TLS from {} ({})", port, peer.ip(), e);
+                                                    if let Ok(mut st) = app_conn.inner.lock() {
+                                                        st.tls_rejection = Some(msg.clone());
+                                                    }
+                                                    app_conn.log("CWMP", "warn", msg);
+                                                }
                                             }
                                         }
                                     }
                                 }
-                            }
-                        });
+                            });
+                        }
                     }
-                }
-            });
+                });
+                handles.push(handle);
+            }
+            Err(e) => {
+                app.log("CWMP", "warn", format!("Could not bind TCP :{} ({})", port, e));
+            }
         }
     }
 
-    Ok(())
+    if !bound_any {
+        anyhow::bail!("Could not bind any CWMP TLS ports (:8443, :9443, :7443, :443).");
+    }
+
+    Ok(handles)
 }
 
 async fn handle_http_session(
@@ -166,6 +195,9 @@ async fn handle_http_session(
     peer_ip: IpAddr,
     port: u16,
     stb_done_tx: watch::Sender<Option<IpAddr>>,
+    engine: Arc<Mutex<EngineState>>,
+    session_complete: Arc<AtomicBool>,
+    app: Arc<AppState>,
 ) {
     let (read_half, mut write_half) = tokio::io::split(stream);
     let mut reader = BufReader::new(read_half);
@@ -253,7 +285,7 @@ async fn handle_http_session(
             );
             let _ = write_half.write_all(resp.as_bytes()).await;
             let _ = write_half.flush().await;
-            println!("[CWMP:{}] {} <<< 200 OK netcheck-spoof (FTTH)", port, peer_ip);
+            app.log("CWMP", "ok", format!(":{} {} <<< 200 OK netcheck-spoof (FTTH)", port, peer_ip));
             continue;
         }
 
@@ -268,9 +300,9 @@ async fn handle_http_session(
             let cwmp_id = extract_cwmp_id(&body_str);
             let dialect = detect_dialect(&body_str);
 
-            if !SESSION_COMPLETE.load(Ordering::SeqCst) {
-                log_inform_details(&body_str, port);
-                if let Ok(mut st) = engine_state().lock() {
+            if !session_complete.load(Ordering::SeqCst) {
+                log_inform_details(&body_str, port, &app);
+                if let Ok(mut st) = engine.lock() {
                     st.dialect = dialect.clone();
                     st.rpc_counter = 0;
                     if st.queue.is_empty() {
@@ -292,33 +324,35 @@ async fn handle_http_session(
             );
             let _ = write_half.write_all(resp.as_bytes()).await;
             let _ = write_half.flush().await;
-            println!(
-                "[CWMP:{}] {} <<< 200 OK InformResponse (ID={}, root={})",
-                port, peer_ip, cwmp_id, dialect.root
+            app.log(
+                "CWMP",
+                "ok",
+                format!(":{} InformResponse sent (ID={}, root={})", port, cwmp_id, dialect.root),
             );
             continue;
         }
 
-        if SESSION_COMPLETE.load(Ordering::SeqCst) {
+        if session_complete.load(Ordering::SeqCst) {
             send_204(&mut write_half).await;
             break;
         }
 
         if !body_str.trim().is_empty() {
-            process_stb_response(&body_str, port);
+            process_stb_response(&body_str, port, &engine, &app);
         }
 
         let next_xml = {
-            if let Ok(mut st) = engine_state().lock() {
+            if let Ok(mut st) = engine.lock() {
                 let mut chosen = None;
                 while let Some(action) = st.queue.pop_front() {
                     match action {
                         RpcAction::GetParamNames { path, next_level } => {
                             st.rpc_counter += 1;
                             let id = st.rpc_counter.to_string();
-                            println!(
-                                "[CWMP:{}] {} <<< RPC #{}: GetParameterNames (path='{}', nextLevel={})",
-                                port, peer_ip, id, path, next_level
+                            app.log(
+                                "CWMP",
+                                "info",
+                                format!("RPC #{}: GetParameterNames (path='{}')", id, path),
                             );
                             chosen = Some(get_param_names_xml(&st.dialect, &id, &path, next_level));
                             break;
@@ -329,9 +363,10 @@ async fn handle_http_session(
                             }
                             st.rpc_counter += 1;
                             let id = st.rpc_counter.to_string();
-                            println!(
-                                "[CWMP:{}] {} <<< RPC #{}: SetParameterValues ({} = {})",
-                                port, peer_ip, id, name, value
+                            app.log(
+                                "CWMP",
+                                "info",
+                                format!("RPC #{}: SetParameterValues ({} = {})", id, name, value),
                             );
                             chosen = Some(set_single_param_xml(&st.dialect, &id, &name, &xsd_type, &value));
                             break;
@@ -347,17 +382,15 @@ async fn handle_http_session(
         if let Some(soap) = next_xml {
             send_soap(&mut write_half, &soap).await;
         } else {
-            let any_ok = engine_state()
-                .lock()
-                .map(|st| st.any_set_succeeded)
-                .unwrap_or(false);
+            let any_ok = engine.lock().map(|st| st.any_set_succeeded).unwrap_or(false);
             if any_ok {
-                SESSION_COMPLETE.store(true, Ordering::SeqCst);
+                session_complete.store(true, Ordering::SeqCst);
             }
             send_204(&mut write_half).await;
-            println!(
-                "[CWMP:{}] {} <<< 204 No Content (CWMP Sequence Complete, set_ok={})",
-                port, peer_ip, any_ok
+            app.log(
+                "CWMP",
+                if any_ok { "ok" } else { "warn" },
+                format!("CWMP sequence finished (set_accepted={})", any_ok),
             );
             let _ = stb_done_tx.send(Some(peer_ip));
             break;
@@ -365,7 +398,7 @@ async fn handle_http_session(
     }
 }
 
-fn log_inform_details(xml: &str, port: u16) {
+fn log_inform_details(xml: &str, port: u16, app: &Arc<AppState>) {
     let mut info_items = Vec::new();
     for (name, val) in extract_param_values(xml) {
         if name.contains("SoftwareVersion")
@@ -378,37 +411,39 @@ fn log_inform_details(xml: &str, port: u16) {
         }
     }
     if !info_items.is_empty() {
-        println!("[CWMP:{}] STB Inform Details: {}", port, info_items.join(" | "));
+        app.log("CWMP", "info", format!(":{} STB Inform: {}", port, info_items.join(" | ")));
     }
 }
 
-fn process_stb_response(xml: &str, port: u16) {
+fn process_stb_response(xml: &str, port: u16, engine: &Arc<Mutex<EngineState>>, app: &Arc<AppState>) {
     if xml.contains("SetParameterValuesResponse") {
         let status = extract_tag_value(xml, "Status").unwrap_or("0");
-        println!(
-            "[CWMP:{}] [SUCCESS] STB accepted parameter update! (SetParameterValuesResponse Status={})",
-            port, status
+        app.log(
+            "CWMP",
+            "ok",
+            format!(":{} STB accepted SetParameterValues! (Status={})", port, status),
         );
-        if let Ok(mut st) = engine_state().lock() {
+        if let Ok(mut st) = engine.lock() {
             st.any_set_succeeded = true;
+        }
+        if let Ok(mut st) = app.inner.lock() {
+            st.cwmp_set_ok = true;
         }
     } else if xml.contains("GetParameterNamesResponse") {
         let params = extract_param_info_list(xml);
-        println!(
-            "[CWMP:{}] [DISCOVERY] STB returned {} parameter paths:",
-            port,
-            params.len()
+        app.log(
+            "CWMP",
+            "info",
+            format!(":{} Discovered {} TR-069 parameter paths", port, params.len()),
         );
-        if let Ok(mut st) = engine_state().lock() {
+        if let Ok(mut st) = engine.lock() {
             let mut new_discoveries = Vec::new();
             let mut date_sets = Vec::new();
             let mut usb_sets = Vec::new();
             let mut fota_sets = Vec::new();
 
             for (name, writable) in params {
-                println!("   -> {} (writable={})", name, writable);
                 let low = name.to_ascii_lowercase();
-
                 if name.ends_with('.') {
                     if (low.contains("jiostb")
                         || low.contains("jstb")
@@ -464,7 +499,6 @@ fn process_stb_response(xml: &str, port: u16) {
                 }
             }
 
-            // Pop order: new_discoveries -> date_sets -> usb_sets -> fota_sets
             for item in fota_sets.into_iter().rev() {
                 st.queue.push_front(item);
             }
@@ -484,17 +518,9 @@ fn process_stb_response(xml: &str, port: u16) {
         if let Some(p_fault) = xml.find("SetParameterValuesFault>") {
             let sub = &xml[p_fault..];
             let pname = extract_tag_value(sub, "ParameterName").unwrap_or("?");
-            let pcode = extract_tag_value(sub, "FaultCode").unwrap_or(code);
-            let pmsg = extract_tag_value(sub, "FaultString").unwrap_or(msg);
-            println!(
-                "[CWMP:{}] STB Fault {} ({}) on '{}' [inner {}: {}] - advancing",
-                port, code, msg, pname, pcode, pmsg
-            );
+            app.log("CWMP", "warn", format!("Fault {} ({}) on '{}' — trying next", code, msg, pname));
         } else {
-            println!(
-                "[CWMP:{}] STB replied with Fault {} ({}) - advancing to next candidate",
-                port, code, msg
-            );
+            app.log("CWMP", "warn", format!("Fault {} ({}) — trying next candidate", code, msg));
         }
     }
 }
@@ -526,12 +552,10 @@ fn push_vendor_branch(q: &mut VecDeque<RpcAction>, root: &str, branch: &str) {
 fn queue_isolated_fallbacks(q: &mut VecDeque<RpcAction>, root: &str, family: StbFamily) {
     match family {
         StbFamily::Jhs => {
-            // JHSB200 / JHSC200 / JHSD200 use Device.JioSTB.* primarily
             push_vendor_branch(q, root, "JioSTB");
             push_vendor_branch(q, root, "JSTB");
         }
         StbFamily::Jms => {
-            // JMSC200A / JMSB200A / JMSD200A use Device.JSTB.* primarily
             push_vendor_branch(q, root, "JSTB");
             push_vendor_branch(q, root, "JioSTB");
         }
@@ -613,8 +637,6 @@ fn extract_tag_value<'a>(xml: &'a str, tag: &str) -> Option<&'a str> {
             return Some(xml[start..start + e].trim());
         }
     }
-
-    // Also match namespace-prefixed tags like <cwmp:FaultCode>
     let prefixed_suffix = format!(":{}>", tag);
     if let Some(s) = xml.find(&prefixed_suffix) {
         let start = s + prefixed_suffix.len();
