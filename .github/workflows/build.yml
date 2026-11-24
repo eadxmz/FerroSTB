@@ -101,12 +101,13 @@ jobs:
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.7.0
-          name: "FerroSTB v0.7.0 — Windows & Linux Provisioning Suite + Toolbox"
+          tag_name: v0.8.0
+          name: "FerroSTB v0.8.0 — Universal JHS (JHSB200/JHSC200/JHSD200) & JMS Suite"
           body: |
-            ### FerroSTB v0.7.0 Release Bundles
+            ### FerroSTB v0.8.0 Release Bundles
+            * **Added Full JHS Series Support (`JHSB200`, `JHSC200`, `JHSD200` / JioOS 2.0):** eMudhra System CA chain (`forged_chain.pem`), `Device.JioSTB.*` TR-069 tree, `*.jiostb.com` DNS spoofing, Iwedia 4-service OTA freeze, and `com.jio.tr069client` reboot-ADB protection.
             * **`FerroSTB-Windows-Bundle.zip`**: Standalone `ferrostb.exe` & `ferrostb-toolbox.exe` for Windows 10/11 (Run as Administrator).
-            * **`FerroSTB-Linux-Bundle.zip` / `.tar.gz`**: Standalone `ferrostb` & `ferrostb-toolbox` for Linux x86_64 (Run with `sudo ./ferrostb`).
+            * **`FerroSTB-Linux-Bundle.zip` / `.tar.gz`**: Standalone `ferrostb` & `ferrostb-toolbox` for Linux x86_64 (`sudo ./ferrostb`).
           draft: false
           prerelease: false
           files: |

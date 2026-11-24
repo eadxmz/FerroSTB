@@ -15,7 +15,47 @@ pub const ADB_LINUX: &[u8] = include_bytes!("../adb_linux");
 
 pub const TVOS_LAUNCHER_APK: &[u8] = include_bytes!("../tvOS-Launcher.apk");
 pub const SHEVERY_APK: &[u8] = include_bytes!("../shevery-release.apk");
+
+#[allow(dead_code)]
 pub const ACS_CHAIN_PEM: &[u8] = include_bytes!("../tls/acs_chain.pem");
+#[allow(dead_code)]
+pub const FORGED_CHAIN_PEM: &[u8] = include_bytes!("../tls/forged_chain.pem");
+
+#[allow(dead_code)]
+fn is_valid_pem_bundle(bytes: &[u8]) -> bool {
+    let text = String::from_utf8_lossy(bytes);
+    text.contains("-----BEGIN CERTIFICATE-----") && text.contains("PRIVATE KEY-----")
+}
+
+/// Loads the JHS (JHSB200 / JHSC200 / JHSD200) eMudhra TLS chain.
+/// Checks external files next to the binary / CWD first, then falls back to the embedded copy.
+#[allow(dead_code)]
+pub fn load_jhs_forged_chain() -> Option<(Vec<u8>, String)> {
+    let mut candidates: Vec<PathBuf> = Vec::new();
+
+    if let Ok(exe) = env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            candidates.push(dir.join("forged_chain.pem"));
+            candidates.push(dir.join("tls").join("forged_chain.pem"));
+        }
+    }
+    candidates.push(PathBuf::from("forged_chain.pem"));
+    candidates.push(PathBuf::from("tls/forged_chain.pem"));
+
+    for path in candidates {
+        if let Ok(bytes) = fs::read(&path) {
+            if is_valid_pem_bundle(&bytes) {
+                return Some((bytes, format!("external file ({})", path.display())));
+            }
+        }
+    }
+
+    if is_valid_pem_bundle(FORGED_CHAIN_PEM) {
+        return Some((FORGED_CHAIN_PEM.to_vec(), "embedded tls/forged_chain.pem".to_string()));
+    }
+
+    None
+}
 
 pub fn adb_bin_path(work_dir: &Path) -> PathBuf {
     #[cfg(target_os = "windows")]

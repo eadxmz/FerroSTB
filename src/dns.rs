@@ -11,6 +11,7 @@ pub async fn run_dns_server(
 ) {
     let mut buf = [0u8; 512];
     let mut logged_domains: HashSet<String> = HashSet::new();
+    let mut logged_ignored: HashSet<String> = HashSet::new();
 
     loop {
         let (len, peer) = match socket.recv_from(&mut buf).await {
@@ -46,6 +47,11 @@ pub async fn run_dns_server(
                 let _ = socket.send_to(&resp, peer).await;
             }
         } else {
+            if (qname.contains("jio") || qname.contains("iwedia") || qname.contains("bluebank"))
+                && logged_ignored.insert(qname.clone())
+            {
+                println!("[DNS] Blocked (NXDOMAIN) '{}' from STB {}", qname, peer.ip());
+            }
             if let Some(resp) = build_nxdomain_response(&buf[..len]) {
                 let _ = socket.send_to(&resp, peer).await;
             }
@@ -56,6 +62,7 @@ pub async fn run_dns_server(
 fn should_spoof(qname: &str) -> bool {
     qname.contains("acs")
         || qname.contains("tr069")
+        || qname.contains("jiostb.com")
         || qname.contains("iot.jio.com")
         || qname == "api.jio.com"
         || qname == "jiostb.cdn.jio.com"

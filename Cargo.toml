@@ -1,8 +1,8 @@
 [package]
 name = "ferrostb"
-version = "0.7.0"
+version = "0.8.0"
 edition = "2021"
-description = "Zero-dependency Rust TR-069 CWMP unlocker, tvOS-Launcher provisioner & Toolbox for Jio STB (Windows & Linux)"
+description = "Zero-dependency Rust TR-069 CWMP unlocker (JHS & JMS), tvOS-Launcher provisioner & Toolbox for Jio STB"
 
 [dependencies]
 tokio = { version = "1.40", features = ["full"] }

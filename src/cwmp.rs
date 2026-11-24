@@ -1,10 +1,9 @@
-use crate::assets::ACS_CHAIN_PEM;
 use anyhow::Result;
 use flate2::read::GzDecoder;
 use openssl::pkey::PKey;
 use openssl::ssl::{Ssl, SslAcceptor, SslMethod, SslVerifyMode};
 use openssl::x509::X509;
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::io::Read;
 use std::net::IpAddr;
 use std::pin::Pin;
@@ -18,6 +17,12 @@ use tokio_openssl::SslStream;
 const PRECOMPUTED_NETCHECK: &str = "UzLgdFHvJkBfRQiHnNQit+55dub3o1PbxIhuNZ7oJc8=";
 
 static SESSION_COMPLETE: AtomicBool = AtomicBool::new(false);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StbFamily {
+    Jhs,
+    Jms,
+}
 
 #[derive(Clone)]
 struct SoapDialect {
@@ -45,9 +50,11 @@ enum RpcAction {
 }
 
 struct EngineState {
+    family: StbFamily,
     dialect: SoapDialect,
     queue: VecDeque<RpcAction>,
     discovered_vendor_branches: Vec<String>,
+    attempted_sets: HashSet<(String, String)>,
     any_set_succeeded: bool,
     rpc_counter: usize,
 }
@@ -55,9 +62,11 @@ struct EngineState {
 impl Default for EngineState {
     fn default() -> Self {
         Self {
+            family: StbFamily::Jhs,
             dialect: SoapDialect::default(),
             queue: VecDeque::new(),
             discovered_vendor_branches: Vec::new(),
+            attempted_sets: HashSet::new(),
             any_set_succeeded: false,
             rpc_counter: 0,
         }
@@ -70,11 +79,18 @@ fn engine_state() -> &'static Mutex<EngineState> {
 }
 
 pub async fn run_cwmp_servers(
+    family: StbFamily,
+    cert_pem: Vec<u8>,
+    cert_label: &str,
     stb_ip_tx: watch::Sender<Option<IpAddr>>,
     stb_done_tx: watch::Sender<Option<IpAddr>>,
 ) -> Result<()> {
-    let certs = X509::stack_from_pem(ACS_CHAIN_PEM)?;
-    let pkey = PKey::private_key_from_pem(ACS_CHAIN_PEM)?;
+    if let Ok(mut st) = engine_state().lock() {
+        st.family = family;
+    }
+
+    let certs = X509::stack_from_pem(&cert_pem)?;
+    let pkey = PKey::private_key_from_pem(&cert_pem)?;
 
     let mut builder = SslAcceptor::mozilla_intermediate(SslMethod::tls_server())?;
     builder.set_min_proto_version(None)?;
@@ -92,7 +108,7 @@ pub async fn run_cwmp_servers(
 
     for port in [8443u16, 9443, 7443, 443] {
         if let Ok(listener) = TcpListener::bind(("0.0.0.0", port)).await {
-            println!("[CWMP-TLS] Listening on 0.0.0.0:{} (RILROOTCA + @SECLEVEL=0)", port);
+            println!("[CWMP-TLS] Listening on 0.0.0.0:{} ({})", port, cert_label);
             let acc = acceptor.clone();
             let ip_tx = stb_ip_tx.clone();
             let done_tx = stb_done_tx.clone();
@@ -115,8 +131,23 @@ pub async fn run_cwmp_servers(
                             }
                             if let Ok(ssl) = Ssl::new(acc.context()) {
                                 if let Ok(mut tls_stream) = SslStream::new(ssl, tcp) {
-                                    if Pin::new(&mut tls_stream).accept().await.is_ok() {
-                                        handle_http_session(tls_stream, peer.ip(), port, done_tx).await;
+                                    match Pin::new(&mut tls_stream).accept().await {
+                                        Ok(()) => {
+                                            handle_http_session(tls_stream, peer.ip(), port, done_tx).await;
+                                        }
+                                        Err(e) => {
+                                            if port == 8443 || port == 9443 {
+                                                eprintln!(
+                                                    "[CWMP:{}] TLS handshake rejected by {}: {}",
+                                                    port,
+                                                    peer.ip(),
+                                                    e
+                                                );
+                                                eprintln!(
+                                                    "           -> Tip: Ensure you selected the right STB family (JHS needs eMudhra forged_chain.pem; JMS needs acs_chain.pem)."
+                                                );
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -243,11 +274,12 @@ async fn handle_http_session(
                     st.dialect = dialect.clone();
                     st.rpc_counter = 0;
                     if st.queue.is_empty() {
+                        let fam = st.family;
                         st.queue.push_back(RpcAction::GetParamNames {
                             path: format!("{}.", dialect.root),
                             next_level: true,
                         });
-                        queue_isolated_fallbacks(&mut st.queue, &dialect.root);
+                        queue_isolated_fallbacks(&mut st.queue, &dialect.root, fam);
                     }
                 }
             }
@@ -278,28 +310,35 @@ async fn handle_http_session(
 
         let next_xml = {
             if let Ok(mut st) = engine_state().lock() {
-                if let Some(action) = st.queue.pop_front() {
-                    st.rpc_counter += 1;
-                    let id = st.rpc_counter.to_string();
+                let mut chosen = None;
+                while let Some(action) = st.queue.pop_front() {
                     match action {
                         RpcAction::GetParamNames { path, next_level } => {
+                            st.rpc_counter += 1;
+                            let id = st.rpc_counter.to_string();
                             println!(
                                 "[CWMP:{}] {} <<< RPC #{}: GetParameterNames (path='{}', nextLevel={})",
                                 port, peer_ip, id, path, next_level
                             );
-                            Some(get_param_names_xml(&st.dialect, &id, &path, next_level))
+                            chosen = Some(get_param_names_xml(&st.dialect, &id, &path, next_level));
+                            break;
                         }
                         RpcAction::SetSingleParam { name, xsd_type, value } => {
+                            if !st.attempted_sets.insert((name.clone(), value.clone())) {
+                                continue;
+                            }
+                            st.rpc_counter += 1;
+                            let id = st.rpc_counter.to_string();
                             println!(
                                 "[CWMP:{}] {} <<< RPC #{}: SetParameterValues ({} = {})",
                                 port, peer_ip, id, name, value
                             );
-                            Some(set_single_param_xml(&st.dialect, &id, &name, &xsd_type, &value))
+                            chosen = Some(set_single_param_xml(&st.dialect, &id, &name, &xsd_type, &value));
+                            break;
                         }
                     }
-                } else {
-                    None
                 }
+                chosen
             } else {
                 None
             }
@@ -308,9 +347,18 @@ async fn handle_http_session(
         if let Some(soap) = next_xml {
             send_soap(&mut write_half, &soap).await;
         } else {
-            SESSION_COMPLETE.store(true, Ordering::SeqCst);
+            let any_ok = engine_state()
+                .lock()
+                .map(|st| st.any_set_succeeded)
+                .unwrap_or(false);
+            if any_ok {
+                SESSION_COMPLETE.store(true, Ordering::SeqCst);
+            }
             send_204(&mut write_half).await;
-            println!("[CWMP:{}] {} <<< 204 No Content (CWMP Sequence Complete!)", port, peer_ip);
+            println!(
+                "[CWMP:{}] {} <<< 204 No Content (CWMP Sequence Complete, set_ok={})",
+                port, peer_ip, any_ok
+            );
             let _ = stb_done_tx.send(Some(peer_ip));
             break;
         }
@@ -353,18 +401,22 @@ fn process_stb_response(xml: &str, port: u16) {
         );
         if let Ok(mut st) = engine_state().lock() {
             let mut new_discoveries = Vec::new();
-            let mut dynamic_sets = Vec::new();
+            let mut date_sets = Vec::new();
+            let mut usb_sets = Vec::new();
+            let mut fota_sets = Vec::new();
 
             for (name, writable) in params {
                 println!("   -> {} (writable={})", name, writable);
                 let low = name.to_ascii_lowercase();
 
                 if name.ends_with('.') {
-                    if (low.contains("jstb")
+                    if (low.contains("jiostb")
+                        || low.contains("jstb")
                         || low.contains("jio")
                         || low.contains("usb")
                         || low.contains("fota")
                         || low.contains("stb")
+                        || low.contains("debug")
                         || low.contains("x_")
                         || low.contains("deviceinfo")
                         || low.contains("management"))
@@ -376,40 +428,50 @@ fn process_stb_response(xml: &str, port: u16) {
                             next_level: false,
                         });
                     }
-                } else {
-                    if low.contains("debug") && low.contains("date") {
-                        dynamic_sets.push(RpcAction::SetSingleParam {
-                            name: name.clone(),
-                            xsd_type: "xsd:string".to_string(),
-                            value: "2037-01-01_00:00:00".to_string(),
-                        });
-                        dynamic_sets.push(RpcAction::SetSingleParam {
-                            name: name.clone(),
-                            xsd_type: "xsd:string".to_string(),
-                            value: "31-12-2037 23:59:59".to_string(),
-                        });
-                    } else if low.contains("usbdebugging") || (low.contains("adb") && writable) {
-                        dynamic_sets.push(RpcAction::SetSingleParam {
-                            name: name.clone(),
-                            xsd_type: "xsd:boolean".to_string(),
-                            value: "true".to_string(),
-                        });
-                        dynamic_sets.push(RpcAction::SetSingleParam {
-                            name: name.clone(),
-                            xsd_type: "xsd:boolean".to_string(),
-                            value: "1".to_string(),
-                        });
-                    } else if low.contains("fota") && low.contains("disable") {
-                        dynamic_sets.push(RpcAction::SetSingleParam {
-                            name: name.clone(),
-                            xsd_type: "xsd:boolean".to_string(),
-                            value: "true".to_string(),
-                        });
-                    }
+                } else if low.contains("debug") && low.contains("date") {
+                    date_sets.push(RpcAction::SetSingleParam {
+                        name: name.clone(),
+                        xsd_type: "xsd:string".to_string(),
+                        value: "2037-01-01_00:00:00".to_string(),
+                    });
+                    date_sets.push(RpcAction::SetSingleParam {
+                        name: name.clone(),
+                        xsd_type: "xsd:string".to_string(),
+                        value: "31-12-2037 23:59:59".to_string(),
+                    });
+                    date_sets.push(RpcAction::SetSingleParam {
+                        name: name.clone(),
+                        xsd_type: "xsd:string".to_string(),
+                        value: "2037-01-01T00:00:00.000Z".to_string(),
+                    });
+                } else if low.contains("usbdebugging") || (low.contains("adb") && writable) {
+                    usb_sets.push(RpcAction::SetSingleParam {
+                        name: name.clone(),
+                        xsd_type: "xsd:boolean".to_string(),
+                        value: "true".to_string(),
+                    });
+                    usb_sets.push(RpcAction::SetSingleParam {
+                        name: name.clone(),
+                        xsd_type: "xsd:boolean".to_string(),
+                        value: "1".to_string(),
+                    });
+                } else if low.contains("fota") && low.contains("disable") {
+                    fota_sets.push(RpcAction::SetSingleParam {
+                        name: name.clone(),
+                        xsd_type: "xsd:boolean".to_string(),
+                        value: "true".to_string(),
+                    });
                 }
             }
 
-            for item in dynamic_sets.into_iter().rev() {
+            // Pop order: new_discoveries -> date_sets -> usb_sets -> fota_sets
+            for item in fota_sets.into_iter().rev() {
+                st.queue.push_front(item);
+            }
+            for item in usb_sets.into_iter().rev() {
+                st.queue.push_front(item);
+            }
+            for item in date_sets.into_iter().rev() {
                 st.queue.push_front(item);
             }
             for item in new_discoveries.into_iter().rev() {
@@ -419,7 +481,7 @@ fn process_stb_response(xml: &str, port: u16) {
     } else if xml.contains("Fault") {
         let code = extract_tag_value(xml, "FaultCode").unwrap_or("unknown");
         let msg = extract_tag_value(xml, "FaultString").unwrap_or("unknown");
-        if let Some(p_fault) = xml.find("<SetParameterValuesFault>") {
+        if let Some(p_fault) = xml.find("SetParameterValuesFault>") {
             let sub = &xml[p_fault..];
             let pname = extract_tag_value(sub, "ParameterName").unwrap_or("?");
             let pcode = extract_tag_value(sub, "FaultCode").unwrap_or(code);
@@ -437,19 +499,19 @@ fn process_stb_response(xml: &str, port: u16) {
     }
 }
 
-fn queue_isolated_fallbacks(q: &mut VecDeque<RpcAction>, root: &str) {
+fn push_vendor_branch(q: &mut VecDeque<RpcAction>, root: &str, branch: &str) {
     q.push_back(RpcAction::GetParamNames {
-        path: format!("{}.JSTB.", root),
+        path: format!("{}.{}.", root, branch),
         next_level: false,
     });
 
     let candidates = [
-        (format!("{}.JSTB.USB.DebugValidityDate", root), "xsd:string", "2037-01-01_00:00:00"),
-        (format!("{}.JSTB.USB.DebugValidityDate", root), "xsd:string", "31-12-2037 23:59:59"),
-        (format!("{}.JSTB.USB.DebugValidityDate", root), "xsd:string", "2037-01-01T00:00:00.000Z"),
-        (format!("{}.JSTB.USB.USBDebugging", root), "xsd:boolean", "true"),
-        (format!("{}.JSTB.USB.USBDebugging", root), "xsd:boolean", "1"),
-        (format!("{}.JSTB.FOTA.Disable", root), "xsd:boolean", "true"),
+        (format!("{}.{}.USB.DebugValidityDate", root, branch), "xsd:string", "2037-01-01_00:00:00"),
+        (format!("{}.{}.USB.DebugValidityDate", root, branch), "xsd:string", "31-12-2037 23:59:59"),
+        (format!("{}.{}.USB.DebugValidityDate", root, branch), "xsd:string", "2037-01-01T00:00:00.000Z"),
+        (format!("{}.{}.USB.USBDebugging", root, branch), "xsd:boolean", "true"),
+        (format!("{}.{}.USB.USBDebugging", root, branch), "xsd:boolean", "1"),
+        (format!("{}.{}.FOTA.Disable", root, branch), "xsd:boolean", "true"),
     ];
 
     for (name, xsd_type, val) in candidates {
@@ -458,6 +520,21 @@ fn queue_isolated_fallbacks(q: &mut VecDeque<RpcAction>, root: &str) {
             xsd_type: xsd_type.to_string(),
             value: val.to_string(),
         });
+    }
+}
+
+fn queue_isolated_fallbacks(q: &mut VecDeque<RpcAction>, root: &str, family: StbFamily) {
+    match family {
+        StbFamily::Jhs => {
+            // JHSB200 / JHSC200 / JHSD200 use Device.JioSTB.* primarily
+            push_vendor_branch(q, root, "JioSTB");
+            push_vendor_branch(q, root, "JSTB");
+        }
+        StbFamily::Jms => {
+            // JMSC200A / JMSB200A / JMSD200A use Device.JSTB.* primarily
+            push_vendor_branch(q, root, "JSTB");
+            push_vendor_branch(q, root, "JioSTB");
+        }
     }
 }
 
@@ -492,6 +569,8 @@ fn detect_dialect(xml: &str) -> SoapDialect {
     };
     let cwmp_ns = if xml.contains("urn:dslforum-org:cwmp-1-2") {
         "urn:dslforum-org:cwmp-1-2"
+    } else if xml.contains("urn:dslforum-org:cwmp-1-1") {
+        "urn:dslforum-org:cwmp-1-1"
     } else {
         "urn:dslforum-org:cwmp-1-0"
     };
@@ -526,11 +605,26 @@ fn extract_cwmp_id(xml: &str) -> &str {
 }
 
 fn extract_tag_value<'a>(xml: &'a str, tag: &str) -> Option<&'a str> {
-    let open = format!("<{}>", tag);
-    let close = format!("</{}>", tag);
-    let start = xml.find(&open)? + open.len();
-    let end = xml[start..].find(&close)? + start;
-    Some(xml[start..end].trim())
+    let direct_open = format!("<{}>", tag);
+    let direct_close = format!("</{}>", tag);
+    if let Some(s) = xml.find(&direct_open) {
+        let start = s + direct_open.len();
+        if let Some(e) = xml[start..].find(&direct_close) {
+            return Some(xml[start..start + e].trim());
+        }
+    }
+
+    // Also match namespace-prefixed tags like <cwmp:FaultCode>
+    let prefixed_suffix = format!(":{}>", tag);
+    if let Some(s) = xml.find(&prefixed_suffix) {
+        let start = s + prefixed_suffix.len();
+        let close_suffix = format!(":{}>", tag);
+        if let Some(e) = xml[start..].find(&close_suffix) {
+            let val_end = xml[start..start + e].rfind('<').unwrap_or(e);
+            return Some(xml[start..start + val_end].trim());
+        }
+    }
+    None
 }
 
 fn extract_param_info_list(xml: &str) -> Vec<(String, bool)> {

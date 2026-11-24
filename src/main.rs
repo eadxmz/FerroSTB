@@ -6,6 +6,7 @@ mod dns;
 mod ntp;
 
 use anyhow::Result;
+use cwmp::StbFamily;
 use local_ip_address::local_ip;
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use std::io::{self, Write};
@@ -22,9 +23,50 @@ const FW_RULE_NAME: &str = "FerroSTB_AutoAllow";
 #[tokio::main]
 async fn main() -> Result<()> {
     println!("=========================================================");
-    println!("  FerroSTB v0.7.0 - High-Speed Rust STB Provisioner      ");
-    println!("  Bundled with tvOS Launcher, Shevery & Ad-Free Shield   ");
+    println!("  FerroSTB v0.8.0 - Universal Jio STB Rust Provisioner   ");
+    println!("  Supports JHS (JHSB200/JHSC200/JHSD200) & JMS Series    ");
     println!("=========================================================");
+
+    println!("\nSelect your Jio STB Model Series:");
+    println!("  [1] JHS Series (JHSB200 / JHSC200 / JHSD200 — JioOS 2.0 / Android 11)");
+    println!("      -> Uses eMudhra System CA chain (forged_chain.pem) + Device.JioSTB.*");
+    println!("  [2] JMS Series (JMSC200A / JMSB200A / JMSD200A — JioOS 1.x / Android 9)");
+    println!("      -> Uses RILROOTCA chain (acs_chain.pem) + Device.JSTB.*");
+    print!("\nEnter choice (1 or 2, default=1): ");
+    io::stdout().flush()?;
+
+    let mut choice = String::new();
+    let _ = io::stdin().read_line(&mut choice);
+    let family = match choice.trim() {
+        "2" => StbFamily::Jms,
+        _ => StbFamily::Jhs,
+    };
+
+    let (cert_pem, cert_label) = match family {
+        StbFamily::Jhs => match assets::load_jhs_forged_chain() {
+            Some((pem, src)) => {
+                println!("[+] Mode: JHS Series (JHSB200/JHSC200/JHSD200)");
+                println!("[+] Loaded JHS TLS chain from {}", src);
+                (pem, format!("JHS eMudhra System CA — {}", src))
+            }
+            None => {
+                eprintln!("\n[!] ERROR: Valid JHS TLS chain (forged_chain.pem) not found!");
+                eprintln!("    JHSB200 / JHSC200 / JHSD200 reject the legacy RILROOTCA cert.");
+                eprintln!("    Place 'forged_chain.pem' (eMudhra chain + private key):");
+                eprintln!("      - Right next to ferrostb.exe (works immediately, no rebuild), OR");
+                eprintln!("      - At tls/forged_chain.pem before building to embed it.");
+                wait_for_enter();
+                anyhow::bail!("Missing forged_chain.pem for JHS mode.");
+            }
+        },
+        StbFamily::Jms => {
+            println!("[+] Mode: JMS Series (JMSC200A/JMSB200A/JMSD200A)");
+            (
+                assets::ACS_CHAIN_PEM.to_vec(),
+                "JMS RILROOTCA + @SECLEVEL=0".to_string(),
+            )
+        }
+    };
 
     let host_ip = match local_ip()? {
         IpAddr::V4(ip) => ip,
@@ -84,11 +126,15 @@ async fn main() -> Result<()> {
         });
     }
 
-    cwmp::run_cwmp_servers(stb_ip_tx.clone(), cwmp_done_tx).await?;
+    cwmp::run_cwmp_servers(family, cert_pem, &cert_label, stb_ip_tx.clone(), cwmp_done_tx).await?;
 
     println!("=========================================================");
     println!("[READY] ALL SERVERS LISTENING!");
-    println!(">>> Unplug the Jio STB power cord, wait 5s, and plug in.");
+    println!(">>> Pull the 12V DC power plug from the STB (do NOT use remote),");
+    println!(">>> wait 5 seconds, and plug it back in.");
+    if family == StbFamily::Jhs {
+        println!(">>> On JHS/JHSB200, wait ~45-60s after boot for TR-069 (:8443/:9443).");
+    }
     println!("=========================================================\n");
 
     let mut watcher_spawned = false;
@@ -140,12 +186,15 @@ async fn main() -> Result<()> {
         eprintln!("\n[!] Provisioning error: {}", e);
     }
 
+    wait_for_enter();
+    Ok(())
+}
+
+fn wait_for_enter() {
     print!("\nPress Enter to exit...");
     let _ = io::stdout().flush();
     let mut dummy = String::new();
     let _ = io::stdin().read_line(&mut dummy);
-
-    Ok(())
 }
 
 fn stop_host_time_daemon() {

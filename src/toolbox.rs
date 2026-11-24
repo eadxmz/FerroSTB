@@ -64,6 +64,8 @@ const REDOWNLOAD_DAEMONS: &[&str] = &[
     "com.jio.bioscopecontentservice",
     "com.iwedia.httpupdate",
     "com.iwedia.updateservice",
+    "com.iwedia.pvodupdateservice",
+    "com.iwedia.updatercuotaservice",
 ];
 
 fn main() -> Result<()> {
@@ -71,7 +73,7 @@ fn main() -> Result<()> {
     let adb_bin = assets::adb_bin_path(&runtime_dir);
 
     println!("==================================================================");
-    println!("  FerroSTB Toolbox v0.7.0 - Ultimate Jio STB Manager & Customizer ");
+    println!("  FerroSTB Toolbox v0.8.0 - Universal Jio STB Manager (JHS + JMS) ");
     println!("  Embedded ADB + tvOS Launcher | System Package Restore Included  ");
     println!("==================================================================");
 
@@ -87,13 +89,13 @@ fn main() -> Result<()> {
         println!("------------------------------------------------------------------");
         println!("  1. Connect to Jio STB via Wireless ADB (<STB_IP>:5555)");
         println!("  2. Install / Sideload APK File(s) (.apk)");
-        println!("  3. Uninstall Apps (Safe Mode: Protects Core OS & Remote)");
+        println!("  3. Uninstall Apps (Safe Mode: Protects Core OS, Remote & JHS ADB)");
         println!("  4. Restore / Reinstall Uninstalled or Disabled System Packages");
         println!("  5. Change / Switch Default Launcher Whenever Wanted");
         println!("  6. Install / Supercharge Bundled tvOS Launcher (All Permissions)");
         println!("  7. Disable / Remove Stock Jio Launcher (Fix Home Button)");
         println!("  8. Remove Boot Ads, Ad Injectors & Promo Screensavers");
-        println!("  9. Block App Auto-Redownloads (ETV, FOTA & Silent Push)");
+        println!("  9. Block App Auto-Redownloads (ETV, FOTA & Iwedia Push)");
         println!(" 10. Performance & RAM Booster (0.5x Animations + Trim Cache)");
         println!(" 11. DNS & System-Wide AdGuard Private DNS Switcher");
         println!(" 12. Backup / Extract Installed App (.apk) to Host PC");
@@ -173,6 +175,23 @@ fn adb_shell(adb_bin: &Path, target: &str, shell_args: &[&str]) -> String {
     args.extend_from_slice(shell_args);
     let (_, stdout, stderr) = adb_exec(adb_bin, &args);
     format!("{}{}", stdout, stderr).trim().to_string()
+}
+
+fn is_jhs_box(adb_bin: &Path, target: &str) -> bool {
+    if !adb_shell(adb_bin, target, &["pm", "list", "packages", "com.iwedia"]).is_empty() {
+        return true;
+    }
+    for prop in ["ro.product.model", "ro.build.product", "ro.product.device"] {
+        let val = adb_shell(adb_bin, target, &["getprop", prop]).to_ascii_lowercase();
+        if val.contains("jhs")
+            || val.contains("bluebank")
+            || val.contains("franklin")
+            || val.contains("skyworth")
+        {
+            return true;
+        }
+    }
+    false
 }
 
 fn neutralize_pkg(adb_bin: &Path, target: &str, pkg: &str) -> String {
@@ -278,8 +297,11 @@ fn sideload_apk(adb_bin: &Path, target: &str) {
     }
 }
 
-fn is_protected_system_package(pkg: &str) -> bool {
+fn is_protected_system_package(pkg: &str, is_jhs: bool) -> bool {
     let low = pkg.to_ascii_lowercase();
+    if is_jhs && low == "com.jio.tr069client" {
+        return true;
+    }
     if PROTECTED_EXACT_PACKAGES.iter().any(|p| p.eq_ignore_ascii_case(pkg)) {
         return true;
     }
@@ -303,9 +325,11 @@ fn is_known_bloat_or_ad_package(pkg: &str) -> bool {
         || BOOT_AD_PACKAGES.contains(&pkg)
         || REDOWNLOAD_DAEMONS.contains(&pkg)
         || pkg == "com.jio.tr069client"
+        || pkg == "insight.tr069.client"
 }
 
 fn safe_uninstall_apps(adb_bin: &Path, target: &str) {
+    let is_jhs = is_jhs_box(adb_bin, target);
     println!("\nSelect package list mode:");
     println!("  [1] User / ADB-Sideloaded Apps Only (Recommended - pm list packages -3)");
     println!("  [2] All Non-Core & Partner Apps (Includes preloaded apps like ETV, OTT apps, etc.)");
@@ -324,7 +348,7 @@ fn safe_uninstall_apps(adb_bin: &Path, target: &str) {
         .lines()
         .filter_map(|line| line.strip_prefix("package:"))
         .map(|s| s.trim().to_string())
-        .filter(|pkg| !pkg.is_empty() && !is_protected_system_package(pkg))
+        .filter(|pkg| !pkg.is_empty() && !is_protected_system_package(pkg, is_jhs))
         .collect();
 
     packages.sort();
@@ -517,6 +541,7 @@ fn discover_home_launchers(adb_bin: &Path, target: &str) -> Vec<String> {
             let low = c.to_ascii_lowercase();
             !low.starts_with("com.jio.stb.screens/")
                 && !low.starts_with("com.iwedia.ui.rjio.launcher.reliance/")
+                && !low.contains("bluebank")
                 && !low.contains("com.android.settings")
                 && !low.contains("com.android.tv.settings")
         })
@@ -608,7 +633,7 @@ fn activate_launcher_component(adb_bin: &Path, target: &str, component: &str) {
 }
 
 fn fix_home_button(adb_bin: &Path, target: &str) {
-    println!("[*] Disabling & removing stock Jio Launchers so Home button never reverts...");
+    println!("[*] Disabling & removing stock Jio / Iwedia Launchers so Home button never reverts...");
     for pkg in STOCK_LAUNCHERS {
         let status = neutralize_pkg(adb_bin, target, pkg);
         println!("    -> {}: {}", pkg, status);
@@ -632,7 +657,10 @@ fn fix_home_button(adb_bin: &Path, target: &str) {
         let trimmed = line.trim();
         if let Some((pkg, _)) = trimmed.split_once('/') {
             let pkg_clean = pkg.split_whitespace().last().unwrap_or(pkg);
-            if pkg_clean.contains("jio") || pkg_clean.contains("iwedia") {
+            if pkg_clean.contains("jio")
+                || pkg_clean.contains("iwedia")
+                || pkg_clean.contains("bluebank")
+            {
                 let status = neutralize_pkg(adb_bin, target, pkg_clean);
                 println!("    -> {} (dynamic Home resolver): {}", pkg_clean, status);
             }
@@ -660,12 +688,12 @@ fn remove_boot_ads(adb_bin: &Path, target: &str) {
 }
 
 fn block_auto_redownloads(adb_bin: &Path, target: &str) {
-    println!("[*] Blocking silent app auto-redownloads (ETV, FOTA & background push daemons)...");
+    println!("[*] Blocking silent app auto-redownloads (ETV, FOTA & Iwedia background daemons)...");
 
     let _ = adb_shell(adb_bin, target, &["settings", "put", "global", "ota_disable_automatic_update", "1"]);
     let _ = adb_shell(adb_bin, target, &["settings", "put", "global", "package_verifier_enable", "0"]);
 
-    let is_jhs = !adb_shell(adb_bin, target, &["pm", "list", "packages", "com.iwedia"]).is_empty();
+    let is_jhs = is_jhs_box(adb_bin, target);
 
     for pkg in REDOWNLOAD_DAEMONS {
         let status = neutralize_pkg(adb_bin, target, pkg);
@@ -673,8 +701,12 @@ fn block_auto_redownloads(adb_bin: &Path, target: &str) {
     }
 
     if !is_jhs {
-        let status = neutralize_pkg(adb_bin, target, "com.jio.tr069client");
-        println!("    -> com.jio.tr069client: {}", status);
+        let s1 = neutralize_pkg(adb_bin, target, "com.jio.tr069client");
+        println!("    -> com.jio.tr069client: {}", s1);
+        let s2 = neutralize_pkg(adb_bin, target, "insight.tr069.client");
+        println!("    -> insight.tr069.client: {}", s2);
+    } else {
+        println!("    -> [JHS PROTECTED] Keeping com.jio.tr069client active so ADB :5555 survives reboots.");
     }
 
     for keyword in ["etv", "eenadu"] {
@@ -682,7 +714,7 @@ fn block_auto_redownloads(adb_bin: &Path, target: &str) {
         for line in matches.lines() {
             if let Some(pkg) = line.strip_prefix("package:") {
                 let pkg = pkg.trim();
-                if !pkg.is_empty() && !is_protected_system_package(pkg) {
+                if !pkg.is_empty() && !is_protected_system_package(pkg, is_jhs) {
                     let status = neutralize_pkg(adb_bin, target, pkg);
                     println!("    -> Blocked ETV package '{}': {}", pkg, status);
                 }
@@ -698,7 +730,7 @@ fn block_auto_redownloads(adb_bin: &Path, target: &str) {
         for line in matches.lines() {
             if let Some(pkg) = line.strip_prefix("package:") {
                 let pkg = pkg.trim();
-                if !pkg.is_empty() && !is_protected_system_package(pkg) {
+                if !pkg.is_empty() && !is_protected_system_package(pkg, is_jhs) {
                     let status = neutralize_pkg(adb_bin, target, pkg);
                     println!("    -> Permanently blocked '{}': {}", pkg, status);
                 }

@@ -42,6 +42,8 @@ const AUTO_REDOWNLOAD_AND_OTA_DAEMONS: &[&str] = &[
     "com.jio.stb.downloadmanager",
     "com.iwedia.httpupdate",
     "com.iwedia.updateservice",
+    "com.iwedia.pvodupdateservice",
+    "com.iwedia.updatercuotaservice",
 ];
 
 pub async fn provision_stb(stb_ip: IpAddr) -> Result<()> {
@@ -119,7 +121,7 @@ pub async fn provision_stb(stb_ip: IpAddr) -> Result<()> {
     run_adb(&adb_bin, &target, &["shell", "appops", "set", "com.shevery", "RUN_ANY_IN_BACKGROUND", "allow"]);
     run_adb(&adb_bin, &target, &["shell", "dumpsys", "deviceidle", "whitelist", "+com.shevery"]);
 
-    // 4. Disable & remove ALL stock Jio / Iwedia launchers so Home button never reverts
+    // 4. Disable & remove ALL stock Jio / Iwedia / Bluebank launchers so Home button never reverts
     println!("[ADB] Disabling & removing stock Jio Launchers (locking Home button)...");
     for pkg in STOCK_LAUNCHERS {
         neutralize_package(&adb_bin, &target, pkg);
@@ -141,23 +143,46 @@ pub async fn provision_stb(stb_ip: IpAddr) -> Result<()> {
 
     // 6. Block silent app auto-redownloads (ETV, OTA updaters, background push daemons)
     println!("[ADB] Blocking silent app auto-redownloads, FOTA & background updaters...");
-    let is_jhs = check_package_exists(&adb_bin, &target, "com.iwedia");
+    let is_jhs = is_jhs_box(&adb_bin, &target);
     for pkg in AUTO_REDOWNLOAD_AND_OTA_DAEMONS {
         neutralize_package(&adb_bin, &target, pkg);
     }
     if !is_jhs {
         neutralize_package(&adb_bin, &target, "com.jio.tr069client");
+        neutralize_package(&adb_bin, &target, "insight.tr069.client");
     } else {
-        println!("[ADB] JHS box detected (com.iwedia.*): keeping com.jio.tr069client enabled so port 5555 persists on boot.");
+        println!("[ADB] JHS box detected (JHSB200/JHSC200/JHSD200): keeping com.jio.tr069client enabled so port 5555 persists across cold reboots!");
     }
 
     run_adb(&adb_bin, &target, &["shell", "am", "start", "-n", &home_comp]);
     println!("\n=========================================================");
-    println!("[+] FerroSTB v0.7.0 + tvOS Launcher Provisioning Complete!");
+    println!("[+] FerroSTB v0.8.0 + tvOS Launcher Provisioning Complete!");
     println!(">>> Open 'ferrostb-toolbox' anytime to sideload APKs,");
     println!(">>> restore system packages, or customize your Jio STB!");
     println!("=========================================================");
     Ok(())
+}
+
+fn is_jhs_box(adb_bin: &Path, target: &str) -> bool {
+    if check_package_exists(adb_bin, target, "com.iwedia") {
+        return true;
+    }
+    for prop in ["ro.product.model", "ro.build.product", "ro.product.device"] {
+        if let Ok(out) = Command::new(adb_bin)
+            .args(["-s", target, "shell", "getprop", prop])
+            .output()
+        {
+            let val = String::from_utf8_lossy(&out.stdout).to_ascii_lowercase();
+            if val.contains("jhs")
+                || val.contains("bluebank")
+                || val.contains("franklin")
+                || val.contains("skyworth")
+            {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 fn grant_tvos_launcher_permissions(adb_bin: &Path, target: &str) {
@@ -214,7 +239,11 @@ fn resolve_active_launcher_component(adb_bin: &Path, target: &str) -> String {
             if trimmed.contains('/') && !trimmed.starts_with("priority") && !trimmed.starts_with("preferred") {
                 let comp = trimmed.split_whitespace().last().unwrap_or(trimmed);
                 let low = comp.to_ascii_lowercase();
-                if !low.contains("jio") && !low.contains("iwedia") && !low.contains("settings") {
+                if !low.contains("jio")
+                    && !low.contains("iwedia")
+                    && !low.contains("bluebank")
+                    && !low.contains("settings")
+                {
                     return comp.to_string();
                 }
             }
@@ -253,7 +282,10 @@ fn disable_any_remaining_jio_home_resolvers(adb_bin: &Path, target: &str) {
             let trimmed = line.trim();
             if let Some((pkg, _act)) = trimmed.split_once('/') {
                 let pkg_clean = pkg.split_whitespace().last().unwrap_or(pkg);
-                if pkg_clean.contains("jio") || pkg_clean.contains("iwedia") {
+                if pkg_clean.contains("jio")
+                    || pkg_clean.contains("iwedia")
+                    || pkg_clean.contains("bluebank")
+                {
                     println!("  [adb] Neutralizing discovered stock Home resolver: {}", pkg_clean);
                     neutralize_package(adb_bin, target, pkg_clean);
                 }
