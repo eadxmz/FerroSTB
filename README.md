@@ -94,6 +94,7 @@ Pre-compiled single-binary releases are published automatically to the **[Releas
 | :--- | :--- | :--- |
 | **`FerroSTB-Windows-v1.0.0.zip`** | Windows 10 / 11 (`x86_64-pc-windows-msvc`) | `ferrostb.exe` |
 | **`FerroSTB-Linux-v1.0.0.zip`** / **`.tar.gz`** | Linux (`x86_64-unknown-linux-gnu`) | `ferrostb` |
+| **`SHA256SUMS.txt`** | Windows & Linux | SHA-256 checksums for all release archives |
 
 ---
 
@@ -228,7 +229,7 @@ FerroSTB will complete the installation of **tvOS Launcher** and **Shevery**, di
 
 ## Building from Source
 
-On **Linux (Ubuntu / Debian)**, install the Slint and native file dialog development headers and place the Linux `adb` binary at `./adb_linux`:
+On **Linux (Ubuntu / Debian)**, install the Slint and native file dialog development headers and place the Linux `adb` binary at `./vendor/adb_linux`:
 
     sudo apt-get update && sudo apt-get install -y \
       pkg-config libdbus-1-dev libfontconfig1-dev \

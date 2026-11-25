@@ -4,17 +4,17 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 #[cfg(target_os = "windows")]
-pub const ADB_EXE: &[u8] = include_bytes!("../adb.exe");
+pub const ADB_EXE: &[u8] = include_bytes!("../vendor/adb.exe");
 #[cfg(target_os = "windows")]
-pub const ADB_WIN_API: &[u8] = include_bytes!("../AdbWinApi.dll");
+pub const ADB_WIN_API: &[u8] = include_bytes!("../vendor/AdbWinApi.dll");
 #[cfg(target_os = "windows")]
-pub const ADB_WIN_USB_API: &[u8] = include_bytes!("../AdbWinUsbApi.dll");
+pub const ADB_WIN_USB_API: &[u8] = include_bytes!("../vendor/AdbWinUsbApi.dll");
 
 #[cfg(not(target_os = "windows"))]
-pub const ADB_LINUX: &[u8] = include_bytes!("../adb_linux");
+pub const ADB_LINUX: &[u8] = include_bytes!("../vendor/adb_linux");
 
-pub const TVOS_LAUNCHER_APK: &[u8] = include_bytes!("../tvOS-Launcher.apk");
-pub const SHEVERY_APK: &[u8] = include_bytes!("../shevery-release.apk");
+pub const TVOS_LAUNCHER_APK: &[u8] = include_bytes!("../vendor/tvOS-Launcher.apk");
+pub const SHEVERY_APK: &[u8] = include_bytes!("../vendor/shevery-release.apk");
 
 pub const ACS_CHAIN_PEM: &[u8] = include_bytes!("../tls/acs_chain.pem");
 pub const FORGED_CHAIN_PEM: &[u8] = include_bytes!("../tls/forged_chain.pem");

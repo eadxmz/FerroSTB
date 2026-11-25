@@ -12,3 +12,4 @@ generate_docs.py
 !assets/
 !assets/ferrostb.svg
 !assets/*.png
+update_repo.py

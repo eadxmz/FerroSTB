@@ -62,10 +62,11 @@ jobs:
 
       - name: Fetch Official Google Android Platform-Tools (Linux ADB)
         run: |
+          mkdir -p vendor
           curl -sSL https://dl.google.com/android/repository/platform-tools-latest-linux.zip -o pt.zip
           unzip -q pt.zip platform-tools/adb
-          mv platform-tools/adb ./adb_linux
-          chmod +x ./adb_linux
+          mv platform-tools/adb ./vendor/adb_linux
+          chmod +x ./vendor/adb_linux
           rm -rf pt.zip platform-tools
 
       - name: Install Rust GNU toolchain
@@ -108,6 +109,12 @@ jobs:
           path: release_assets
           merge-multiple: true
 
+      - name: Generate SHA256SUMS.txt
+        working-directory: release_assets
+        run: |
+          sha256sum FerroSTB-Windows-v1.0.0.zip FerroSTB-Linux-v1.0.0.zip FerroSTB-Linux-v1.0.0.tar.gz > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -115,14 +122,16 @@ jobs:
           name: "FerroSTB v1.0.0 — Native Slint Cosmic-Violet Suite (Provisioner + Toolbox + ADB Shell)"
           body: |
             ### FerroSTB v1.0.0 — Single Native Executable (Zero WebView2 / Zero Browser)
-            * **Native Slint UI + App Icon:** Lightweight native Cosmic-Violet interface with embedded Windows/Linux app icon and prominent Connect-to-STB banner across all Toolbox tabs.
+            * **Native Slint UI + SVG Branding:** Lightweight native Cosmic-Violet interface with prominent Connect-to-STB banner across all Toolbox tabs.
             * **VPN-Safe IPv4 Detection:** Filters out Cloudflare WARP, Tailscale, WireGuard, OpenVPN, WSL, and Hyper-V virtual interfaces automatically, with an interactive LAN adapter selector.
             * **Bundled `forged_chain.pem`:** JHSB200/JHSC200/JHSD200 and JMS support built directly into one executable.
             * **`FerroSTB-Windows-v1.0.0.zip`**: Single `ferrostb.exe` for Windows 10/11 (Run as Administrator).
             * **`FerroSTB-Linux-v1.0.0.zip` / `.tar.gz`**: Single `ferrostb` for Linux x86_64 (`sudo ./ferrostb`).
+            * **`SHA256SUMS.txt`**: SHA-256 checksums for verifying all release archives before running with Administrator/sudo privileges.
           draft: false
           prerelease: false
           files: |
             release_assets/FerroSTB-Windows-v1.0.0.zip
             release_assets/FerroSTB-Linux-v1.0.0.zip
             release_assets/FerroSTB-Linux-v1.0.0.tar.gz
+            release_assets/SHA256SUMS.txt
