@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1a1242"/>
+      <stop offset="55%" stop-color="#140e34"/>
+      <stop offset="100%" stop-color="#2e1664"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="22%" r="52%">
+      <stop offset="0%" stop-color="#a855f7" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#a855f7" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="bolt" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fb923c"/>
+      <stop offset="100%" stop-color="#ea580c"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Cosmic-Violet App Tile -->
+  <rect x="10" y="10" width="236" height="236" rx="50" fill="url(#bg)" stroke="#a855f7" stroke-width="6"/>
+  <rect x="10" y="10" width="236" height="236" rx="50" fill="url(#glow)"/>
+
+  <!-- Jio STB Chassis -->
+  <rect x="40" y="158" width="176" height="54" rx="14" fill="#14102c" stroke="#38bdf8" stroke-width="5"/>
+  <circle cx="68" cy="185" r="7.5" fill="#10b981"/>
+  <rect x="92" y="180" width="48" height="10" rx="5" fill="#948ac4" fill-opacity="0.75"/>
+  <rect x="172" y="180" width="24" height="10" rx="5" fill="#38bdf8"/>
+
+  <!-- Rust Unlock Lightning Bolt -->
+  <path d="M142 38 L84 128 H126 L112 174 L176 96 H134 Z" fill="url(#bolt)"/>
+</svg>

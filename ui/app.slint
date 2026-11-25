@@ -137,7 +137,7 @@ component StepPill inherits Rectangle {
             background: done ? #10b981 : (current ? #a855f7 : #ffffff18);
 
             Text {
-                text: root.num;
+                text: "" + root.num;
                 color: done ? #052e16 : #ffffff;
                 font-size: 11px;
                 font-weight: 700;
@@ -226,7 +226,7 @@ component ConnectBanner inherits Rectangle {
 
 export component MainWindow inherits Window {
     title: "FerroSTB — Jio STB Provisioner & ADB Toolbox";
-    icon: @image-url("../assets/ferrostb.png");
+    icon: @image-url("../assets/ferrostb.svg");
     min-width: 1120px;
     min-height: 700px;
     preferred-width: 1280px;
@@ -319,6 +319,8 @@ export component MainWindow inherits Window {
     callback clean-exit();
 
     HorizontalLayout {
+        width: 100%;
+        height: 100%;
         // ======================= SIDEBAR =======================
         Rectangle {
             width: 244px;
@@ -336,7 +338,7 @@ export component MainWindow inherits Window {
                     padding-bottom: 16px;
 
                     Image {
-                        source: @image-url("../assets/ferrostb.png");
+                        source: @image-url("../assets/ferrostb.svg");
                         width: 38px;
                         height: 38px;
                     }

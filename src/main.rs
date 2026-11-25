@@ -303,16 +303,14 @@ fn main() -> Result<()> {
             let st_c = st.clone();
             let cache_c = cache.clone();
             let weak_c = weak.clone();
-            rt_c.spawn(async move {
-                let picked = rfd::AsyncFileDialog::new()
+            rt_c.spawn_blocking(move || {
+                let Some(apk_path) = rfd::FileDialog::new()
                     .set_title("Select Android APK to Sideload")
                     .add_filter("Android Package (*.apk)", &["apk"])
                     .pick_file()
-                    .await;
-                let Some(handle) = picked else {
+                else {
                     return;
                 };
-                let apk_path = handle.path().to_path_buf();
                 let fname = apk_path
                     .file_name()
                     .map(|s| s.to_string_lossy().to_string())
@@ -322,12 +320,9 @@ fn main() -> Result<()> {
                     u.set_apk_path_input(path_display.into());
                     u.set_upload_status(format!("Installing {}...", fname).into());
                 });
-                let res = tokio::task::spawn_blocking(move || {
-                    let dir = assets::extract_adb_only().map_err(|e| e.to_string())?;
-                    adb::install_apk_file(&assets::adb_bin_path(&dir), &target, &apk_path)
-                })
-                .await
-                .unwrap_or_else(|e| Err(e.to_string()));
+                let res = assets::extract_adb_only()
+                    .map_err(|e| e.to_string())
+                    .and_then(|dir| adb::install_apk_file(&assets::adb_bin_path(&dir), &target, &apk_path));
                 match res {
                     Ok(m) => {
                         let m_c = m.clone();
