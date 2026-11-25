@@ -1,0 +1,1639 @@
+import { ComboBox, LineEdit, ScrollView } from "std-widgets.slint";
+
+export struct PackageItem {
+    name: string,
+    category: string,
+    status: string,
+    is-active: bool,
+}
+
+component CosmicButton inherits Rectangle {
+    in property <string> label;
+    in property <string> variant: "default"; // default | primary | danger | emerald
+    in property <bool> enabled: true;
+    in property <bool> compact: false;
+    callback clicked();
+
+    height: compact ? 30px : 36px;
+    border-radius: compact ? 8px : 10px;
+    border-width: 1px;
+    opacity: enabled ? 1.0 : 0.45;
+
+    background: !enabled ? #1c1638
+        : variant == "primary"
+            ? (ta.has-hover
+                ? @linear-gradient(135deg, #7c3aed 0%, #a855f7 100%)
+                : @linear-gradient(135deg, #6d28d9 0%, #9333ea 100%))
+        : variant == "danger"
+            ? (ta.has-hover ? #6b162d : #3b1222)
+        : variant == "emerald"
+            ? (ta.has-hover ? #0f4c3a : #0d332a)
+        : (ta.has-hover ? #332568 : #211847);
+
+    border-color: variant == "primary" ? #c4b5fd66
+        : variant == "danger" ? #fb718566
+        : variant == "emerald" ? #34d39966
+        : #a78bfa55;
+
+    ta := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+
+    HorizontalLayout {
+        padding-left: compact ? 10px : 14px;
+        padding-right: compact ? 10px : 14px;
+        alignment: center;
+
+        Text {
+            text: root.label;
+            color: variant == "danger" ? #fda4af
+                : variant == "emerald" ? #6ee7b7
+                : #ffffff;
+            font-size: compact ? 11.5px : 12.5px;
+            font-weight: 600;
+            vertical-alignment: center;
+            horizontal-alignment: center;
+        }
+    }
+}
+
+component NavItem inherits Rectangle {
+    in property <string> label;
+    in property <string> badge: "";
+    in property <bool> active: false;
+    callback clicked();
+
+    height: 40px;
+    border-radius: 20px;
+    border-width: 1px;
+    background: active
+        ? @linear-gradient(90deg, #6e44ff66 0%, #a855f72e 100%)
+        : (ta.has-hover ? #7c4dff20 : transparent);
+    border-color: active ? #a78bfa66 : transparent;
+
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+
+    HorizontalLayout {
+        padding-left: 14px;
+        padding-right: 12px;
+        alignment: space-between;
+
+        Text {
+            text: root.label;
+            color: active ? #ffffff : (ta.has-hover ? #ffffff : #9892b8);
+            font-size: 13px;
+            font-weight: active ? 700 : 500;
+            vertical-alignment: center;
+        }
+
+        if root.badge != "" : Rectangle {
+            height: 20px;
+            border-radius: 10px;
+            y: (parent.height - self.height) / 2;
+            background: @linear-gradient(135deg, #6d28d9 0%, #9333ea 100%);
+
+            HorizontalLayout {
+                padding-left: 8px;
+                padding-right: 8px;
+                Text {
+                    text: root.badge;
+                    color: #ffffff;
+                    font-size: 10px;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                }
+            }
+        }
+    }
+}
+
+component StepPill inherits Rectangle {
+    in property <int> num;
+    in property <string> label;
+    in property <bool> done: false;
+    in property <bool> current: false;
+
+    height: 40px;
+    border-radius: 11px;
+    border-width: 1px;
+    background: done ? #10b9811f : (current ? #7c3aed38 : #0e0b20aa);
+    border-color: done ? #10b98177 : (current ? #a855f7cc : #9a80ff28);
+
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 8px;
+
+        Rectangle {
+            width: 20px;
+            height: 20px;
+            border-radius: 10px;
+            y: (parent.height - self.height) / 2;
+            background: done ? #10b981 : (current ? #a855f7 : #ffffff18);
+
+            Text {
+                text: root.num;
+                color: done ? #052e16 : #ffffff;
+                font-size: 11px;
+                font-weight: 700;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+
+        Text {
+            text: root.label;
+            color: done ? #a7f3d0 : (current ? #ffffff : #9892b8);
+            font-size: 11.5px;
+            font-weight: current ? 700 : 500;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+    }
+}
+
+component ConnectBanner inherits Rectangle {
+    in-out property <string> ip-text;
+    in property <bool> connected;
+    in property <string> target-label;
+    callback connect(string);
+    callback auto-detect();
+
+    background: @linear-gradient(135deg, #1f1647 0%, #130e2c 100%);
+    border-radius: 14px;
+    border-width: 1.5px;
+    border-color: connected ? #10b98199 : #38bdf8bb;
+
+    HorizontalLayout {
+        padding: 12px;
+        spacing: 12px;
+
+        // Status indicator pill
+        Rectangle {
+            height: 36px;
+            border-radius: 18px;
+            background: connected ? #0d332a : #172554;
+            border-width: 1px;
+            border-color: connected ? #10b98188 : #38bdf888;
+
+            HorizontalLayout {
+                padding-left: 12px;
+                padding-right: 12px;
+                spacing: 8px;
+
+                Rectangle {
+                    width: 10px;
+                    height: 10px;
+                    border-radius: 5px;
+                    y: (parent.height - self.height) / 2;
+                    background: connected ? #10b981 : #38bdf8;
+                }
+
+                Text {
+                    text: connected ? ("STB: " + target-label) : "Connect to Jio STB";
+                    color: connected ? #6ee7b7 : #bae6fd;
+                    font-size: 12.5px;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        LineEdit {
+            text <=> root.ip-text;
+            placeholder-text: "Enter Jio STB IP (e.g. 192.168.29.181)";
+            horizontal-stretch: 1;
+            accepted(val) => { root.connect(val); }
+        }
+
+        CosmicButton {
+            label: connected ? "Reconnect" : "Connect to STB";
+            variant: "primary";
+            clicked => { root.connect(root.ip-text); }
+        }
+
+        CosmicButton {
+            label: "Auto-Detect";
+            clicked => { root.auto-detect(); }
+        }
+    }
+}
+
+export component MainWindow inherits Window {
+    title: "FerroSTB — Jio STB Provisioner & ADB Toolbox";
+    icon: @image-url("../assets/ferrostb.png");
+    min-width: 1120px;
+    min-height: 700px;
+    preferred-width: 1280px;
+    preferred-height: 820px;
+    background: #090717;
+
+    // Navigation & Global State
+    in-out property <int> active-tab: 0; // 0=Provisioner, 1=Apps, 2=Launchers, 3=Tweaks, 4=ADB Shell
+    in-out property <bool> advanced-mode: false;
+
+    // Provisioner & Network State
+    in-out property <string> selected-family: "jhs";
+    in-out property <[string]> lan-ip-options: [];
+    in-out property <string> selected-lan-ip: "Detecting...";
+    in-out property <string> host-ip: "Detecting...";
+    in-out property <bool> jhs-cert-ready: false;
+    in-out property <string> jhs-cert-source: "Checking...";
+    in-out property <string> prov-status: "idle"; // idle | running | success | failed
+    in-out property <string> step-label: "Ready to start";
+    in-out property <int> current-step: 0;
+    in-out property <int> dns-hits: 0;
+    in-out property <string> detected-stb-ip: "Waiting for STB...";
+    in-out property <string> ports-label: "Idle";
+    in-out property <string> logs-text: "Select JHS or JMS above and click Start Unlocking to bind DNS, NTP, HTTP & CWMP TLS servers.";
+    in-out property <string> success-summary-text: "";
+    in-out property <string> failure-title: "";
+    in-out property <string> failure-reason: "";
+    in-out property <string> failure-fixes-text: "";
+
+    // STB Connection State
+    in-out property <bool> stb-connected: false;
+    in-out property <string> active-target: "";
+    in-out property <string> stb-ip-input: "";
+
+    // App Manager State
+    in-out property <int> app-count: 0;
+    in-out property <int> app-filter-tab: 0; // 0=All, 1=User, 2=Unbound, 3=Bloat
+    in-out property <string> pkg-search: "";
+    in-out property <string> apk-path-input: "";
+    in-out property <string> upload-status: "Browse for any .apk or paste a full local path (installs via adb install -r -d -g)";
+    in-out property <[PackageItem]> filtered-packages: [];
+
+    // Launchers & Shield State
+    in-out property <[string]> launchers: [];
+    in-out property <string> custom-launcher-input: "";
+    in-out property <string> block-keyword-input: "";
+    in-out property <string> shield-output: "Ready.";
+
+    // Tweaks & Remote State
+    in-out property <string> tv-text-input: "";
+    in-out property <bool> has-screenshot: false;
+    in-out property <image> screenshot-image;
+
+    // Advanced ADB Terminal State
+    in-out property <string> term-output: "FerroSTB Advanced ADB Terminal ready.\nType any ADB command without the 'adb' prefix (e.g. 'shell getprop ro.product.model' or 'devices').\n";
+    in-out property <string> term-input: "";
+
+    // Toast
+    in-out property <string> toast-message: "";
+    in-out property <bool> toast-visible: false;
+
+    // Rust Callbacks
+    callback select-lan-ip(string);
+    callback refresh-lan-ips();
+    callback start-provision();
+    callback stop-provision();
+    callback connect-stb(string);
+    callback detect-stb();
+    callback browse-apk();
+    callback install-apk-path(string);
+    callback refresh-packages();
+    callback filter-packages-changed();
+    callback uninstall-package(string);
+    callback restore-package(string);
+    callback backup-package(string);
+    callback scan-launchers();
+    callback activate-launcher(string);
+    callback supercharge-tvos();
+    callback fix-home();
+    callback remove-ads();
+    callback block-redownloads(string);
+    callback boost-perf(string);
+    callback set-private-dns(string);
+    callback remote-action(string, string);
+    callback capture-screenshot();
+    callback reboot-stb(string);
+    callback run-term-cmd(string);
+    callback clear-term();
+    callback dismiss-toast();
+    callback clean-exit();
+
+    HorizontalLayout {
+        // ======================= SIDEBAR =======================
+        Rectangle {
+            width: 244px;
+            background: @linear-gradient(180deg, #100c24 0%, #0a0818 100%);
+            border-width: 1px;
+            border-color: #9a80ff26;
+
+            VerticalLayout {
+                padding: 16px;
+                spacing: 6px;
+
+                // Brand Header
+                HorizontalLayout {
+                    spacing: 11px;
+                    padding-bottom: 16px;
+
+                    Image {
+                        source: @image-url("../assets/ferrostb.png");
+                        width: 38px;
+                        height: 38px;
+                    }
+
+                    VerticalLayout {
+                        alignment: center;
+                        Text {
+                            text: "FerroSTB";
+                            color: #f4f3ff;
+                            font-size: 17px;
+                            font-weight: 800;
+                        }
+                        Text {
+                            text: "v1.0.0 Native Slint";
+                            color: #9892b8;
+                            font-size: 11px;
+                        }
+                    }
+                }
+
+                Text {
+                    text: "CORE ENGINE";
+                    color: #6b6590;
+                    font-size: 10px;
+                    font-weight: 700;
+                    letter-spacing: 1.1px;
+                }
+
+                NavItem {
+                    label: "Provisioner";
+                    badge: root.prov-status == "running" ? "LIVE"
+                        : root.prov-status == "success" ? "DONE"
+                        : root.prov-status == "failed" ? "ERR" : "IDLE";
+                    active: root.active-tab == 0;
+                    clicked => { root.active-tab = 0; }
+                }
+
+                Rectangle { height: 8px; }
+
+                Text {
+                    text: "ADB TOOLBOX";
+                    color: #6b6590;
+                    font-size: 10px;
+                    font-weight: 700;
+                    letter-spacing: 1.1px;
+                }
+
+                NavItem {
+                    label: "App Manager";
+                    badge: root.app-count > 0 ? ("" + root.app-count) : "";
+                    active: root.active-tab == 1;
+                    clicked => {
+                        root.active-tab = 1;
+                        if (root.stb-connected && root.app-count == 0) {
+                            root.refresh-packages();
+                        }
+                    }
+                }
+
+                NavItem {
+                    label: "Launchers & Shield";
+                    active: root.active-tab == 2;
+                    clicked => {
+                        root.active-tab = 2;
+                        if (root.stb-connected) {
+                            root.scan-launchers();
+                        }
+                    }
+                }
+
+                NavItem {
+                    label: "Tweaks & Remote";
+                    active: root.active-tab == 3;
+                    clicked => { root.active-tab = 3; }
+                }
+
+                if root.advanced-mode : NavItem {
+                    label: "ADB Terminal";
+                    badge: "ADV";
+                    active: root.active-tab == 4;
+                    clicked => { root.active-tab = 4; }
+                }
+
+                Rectangle { vertical-stretch: 1; }
+
+                // Advanced Mode Toggle
+                Rectangle {
+                    height: 42px;
+                    border-radius: 12px;
+                    background: #7c4dff1a;
+                    border-width: 1px;
+                    border-color: root.advanced-mode ? #a855f788 : #9a80ff28;
+
+                    TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => {
+                            root.advanced-mode = !root.advanced-mode;
+                            if (root.advanced-mode) {
+                                root.active-tab = 4;
+                            } else if (root.active-tab == 4) {
+                                root.active-tab = 0;
+                            }
+                        }
+                    }
+
+                    HorizontalLayout {
+                        padding-left: 12px;
+                        padding-right: 12px;
+                        alignment: space-between;
+
+                        Text {
+                            text: "Advanced ADB Shell";
+                            color: #dcd6ff;
+                            font-size: 12px;
+                            font-weight: 600;
+                            vertical-alignment: center;
+                        }
+
+                        Rectangle {
+                            width: 34px;
+                            height: 18px;
+                            border-radius: 9px;
+                            y: (parent.height - self.height) / 2;
+                            background: root.advanced-mode ? #9333ea : #2b2450;
+
+                            Rectangle {
+                                width: 14px;
+                                height: 14px;
+                                border-radius: 7px;
+                                y: 2px;
+                                x: root.advanced-mode ? 18px : 2px;
+                                background: #ffffff;
+                            }
+                        }
+                    }
+                }
+
+                Rectangle { height: 6px; }
+
+                CosmicButton {
+                    label: "Clean Exit";
+                    variant: "danger";
+                    clicked => { root.clean-exit(); }
+                }
+            }
+        }
+
+        // ======================= MAIN COLUMN =======================
+        VerticalLayout {
+            horizontal-stretch: 1;
+
+            // TOP HEADER: Breadcrumb on Left, Host IP + Prominent STB Pill on Right
+            Rectangle {
+                height: 62px;
+                background: #0d0a1f;
+                border-width: 1px;
+                border-color: #9a80ff24;
+
+                HorizontalLayout {
+                    padding-left: 22px;
+                    padding-right: 22px;
+                    spacing: 12px;
+                    alignment: space-between;
+
+                    // Left: Current Page Title
+                    Text {
+                        text: root.active-tab == 0 ? "FerroSTB  ›  TR-069 Unlocker & Provisioner"
+                            : root.active-tab == 1 ? "Toolbox  ›  App Manager & APK Sideloader"
+                            : root.active-tab == 2 ? "Toolbox  ›  Launchers, Boot Ads & Shield"
+                            : root.active-tab == 3 ? "Toolbox  ›  Tweaks, Private DNS & Remote"
+                            : "Advanced Mode  ›  Interactive ADB Terminal";
+                        color: #f4f3ff;
+                        font-size: 16px;
+                        font-weight: 700;
+                        vertical-alignment: center;
+                    }
+
+                    // Right: Host LAN IP chip + Prominent High-Contrast STB Pill
+                    HorizontalLayout {
+                        spacing: 10px;
+
+                        Rectangle {
+                            height: 34px;
+                            border-radius: 17px;
+                            y: (parent.height - self.height) / 2;
+                            background: #1a1536;
+                            border-width: 1px;
+                            border-color: #9a80ff38;
+
+                            HorizontalLayout {
+                                padding-left: 12px;
+                                padding-right: 12px;
+                                spacing: 7px;
+
+                                Rectangle {
+                                    width: 8px;
+                                    height: 8px;
+                                    border-radius: 4px;
+                                    y: (parent.height - self.height) / 2;
+                                    background: #a855f7;
+                                }
+
+                                Text {
+                                    text: "Host LAN: " + root.host-ip;
+                                    color: #e4e0ff;
+                                    font-size: 12px;
+                                    font-weight: 600;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+
+                        // Prominent Top-Right Connect / Status Pill
+                        Rectangle {
+                            height: 36px;
+                            border-radius: 18px;
+                            y: (parent.height - self.height) / 2;
+                            background: root.stb-connected ? #0d332a : #1d2c54;
+                            border-width: 1.5px;
+                            border-color: root.stb-connected ? #10b981 : #38bdf8;
+
+                            TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => {
+                                    if (root.active-tab == 0) {
+                                        root.active-tab = 1;
+                                    } else if (!root.stb-connected) {
+                                        root.detect-stb();
+                                    }
+                                }
+                            }
+
+                            HorizontalLayout {
+                                padding-left: 14px;
+                                padding-right: 14px;
+                                spacing: 8px;
+
+                                Rectangle {
+                                    width: 9px;
+                                    height: 9px;
+                                    border-radius: 4.5px;
+                                    y: (parent.height - self.height) / 2;
+                                    background: root.stb-connected ? #10b981 : #38bdf8;
+                                }
+
+                                Text {
+                                    text: root.stb-connected
+                                        ? ("Connected: " + root.active-target)
+                                        : "Connect to STB  →";
+                                    color: root.stb-connected ? #a7f3d0 : #e0f2fe;
+                                    font-size: 12.5px;
+                                    font-weight: 700;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ======================= CONTENT AREA =======================
+            ScrollView {
+                vertical-stretch: 1;
+
+                VerticalLayout {
+                    padding: 20px;
+                    spacing: 16px;
+                    alignment: start;
+
+                    // ---------------------------------------------------
+                    // VIEW 0: PROVISIONER
+                    // ---------------------------------------------------
+                    if root.active-tab == 0 : VerticalLayout {
+                        spacing: 16px;
+
+                        // Telemetry + VPN-Filtered LAN IPv4 Selector Card
+                        Rectangle {
+                            background: @linear-gradient(160deg, #1d1642 0%, #110d29 100%);
+                            border-radius: 16px;
+                            border-width: 1px;
+                            border-color: #9a80ff2c;
+
+                            VerticalLayout {
+                                padding: 18px;
+                                spacing: 14px;
+
+                                HorizontalLayout {
+                                    alignment: space-between;
+                                    Text {
+                                        text: "System Telemetry & Physical LAN Adapter";
+                                        color: #dcd6ff;
+                                        font-size: 14px;
+                                        font-weight: 700;
+                                        vertical-alignment: center;
+                                    }
+                                    Text {
+                                        text: root.step-label;
+                                        color: #c4b5fd;
+                                        font-size: 12px;
+                                        font-weight: 600;
+                                        vertical-alignment: center;
+                                    }
+                                }
+
+                                // VPN-safe LAN IPv4 Selector Row
+                                HorizontalLayout {
+                                    spacing: 10px;
+                                    Text {
+                                        text: "Physical LAN IPv4 (VPNs/WARP excluded):";
+                                        color: #a9a2cc;
+                                        font-size: 12.5px;
+                                        vertical-alignment: center;
+                                    }
+                                    ComboBox {
+                                        model: root.lan-ip-options;
+                                        current-value <=> root.selected-lan-ip;
+                                        horizontal-stretch: 1;
+                                        selected(val) => { root.select-lan-ip(val); }
+                                    }
+                                    CosmicButton {
+                                        label: "Refresh NICs";
+                                        compact: true;
+                                        clicked => { root.refresh-lan-ips(); }
+                                    }
+                                }
+
+                                // 4 KPI Cards
+                                HorizontalLayout {
+                                    spacing: 12px;
+
+                                    Rectangle {
+                                        horizontal-stretch: 1;
+                                        background: #0e0b20b8;
+                                        border-radius: 12px;
+                                        border-width: 1px;
+                                        border-color: #9a80ff22;
+                                        VerticalLayout {
+                                            padding: 14px;
+                                            spacing: 5px;
+                                            Text { text: "Host LAN IP (STB DNS 1)"; color: #9892b8; font-size: 11.5px; }
+                                            Text { text: root.host-ip; color: #f4f3ff; font-size: 18px; font-weight: 800; }
+                                            Text { text: "Set STB DNS 2 to 0.0.0.0"; color: #7e77a3; font-size: 11px; }
+                                        }
+                                    }
+
+                                    Rectangle {
+                                        horizontal-stretch: 1;
+                                        background: #0e0b20b8;
+                                        border-radius: 12px;
+                                        border-width: 1px;
+                                        border-color: #9a80ff22;
+                                        VerticalLayout {
+                                            padding: 14px;
+                                            spacing: 5px;
+                                            Text { text: "JHS eMudhra Cert"; color: #9892b8; font-size: 11.5px; }
+                                            Text {
+                                                text: root.jhs-cert-ready ? "Ready" : "Missing";
+                                                color: root.jhs-cert-ready ? #34d399 : #fb7185;
+                                                font-size: 18px;
+                                                font-weight: 800;
+                                            }
+                                            Text { text: root.jhs-cert-source; color: #7e77a3; font-size: 11px; overflow: elide; }
+                                        }
+                                    }
+
+                                    Rectangle {
+                                        horizontal-stretch: 1;
+                                        background: #0e0b20b8;
+                                        border-radius: 12px;
+                                        border-width: 1px;
+                                        border-color: #9a80ff22;
+                                        VerticalLayout {
+                                            padding: 14px;
+                                            spacing: 5px;
+                                            Text { text: "Spoofed DNS Hits"; color: #9892b8; font-size: 11.5px; }
+                                            Text { text: "" + root.dns-hits; color: #f4f3ff; font-size: 18px; font-weight: 800; }
+                                            Text { text: root.detected-stb-ip; color: #7e77a3; font-size: 11px; overflow: elide; }
+                                        }
+                                    }
+
+                                    Rectangle {
+                                        horizontal-stretch: 1;
+                                        background: #0e0b20b8;
+                                        border-radius: 12px;
+                                        border-width: 1px;
+                                        border-color: #9a80ff22;
+                                        VerticalLayout {
+                                            padding: 14px;
+                                            spacing: 5px;
+                                            Text { text: "Port Bindings"; color: #9892b8; font-size: 11.5px; }
+                                            Text { text: root.ports-label; color: #f4f3ff; font-size: 18px; font-weight: 800; }
+                                            Text { text: "DNS :53 · NTP :123 · CWMP"; color: #7e77a3; font-size: 11px; }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Success Banner
+                        if root.prov-status == "success" : Rectangle {
+                            background: @linear-gradient(135deg, #0f3d2e 0%, #1c1345 100%);
+                            border-radius: 14px;
+                            border-width: 1px;
+                            border-color: #34d39988;
+
+                            VerticalLayout {
+                                padding: 16px;
+                                spacing: 8px;
+                                Text {
+                                    text: "Provisioning Complete — Your Jio STB Is Unlocked & Hardened!";
+                                    color: #a7f3d0;
+                                    font-size: 15px;
+                                    font-weight: 700;
+                                }
+                                Text {
+                                    text: root.success-summary-text;
+                                    color: #e2e0f5;
+                                    font-size: 12.5px;
+                                    wrap: word-wrap;
+                                }
+                                HorizontalLayout {
+                                    spacing: 10px;
+                                    alignment: start;
+                                    CosmicButton {
+                                        label: "Open App Manager  →";
+                                        variant: "primary";
+                                        clicked => {
+                                            root.active-tab = 1;
+                                            root.refresh-packages();
+                                        }
+                                    }
+                                    CosmicButton {
+                                        label: "Customize Launchers";
+                                        clicked => {
+                                            root.active-tab = 2;
+                                            root.scan-launchers();
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Failure Banner
+                        if root.prov-status == "failed" : Rectangle {
+                            background: @linear-gradient(135deg, #431223 0%, #1b0d24 100%);
+                            border-radius: 14px;
+                            border-width: 1px;
+                            border-color: #fb718588;
+
+                            VerticalLayout {
+                                padding: 16px;
+                                spacing: 6px;
+                                Text {
+                                    text: root.failure-title;
+                                    color: #fda4af;
+                                    font-size: 15px;
+                                    font-weight: 700;
+                                }
+                                Text {
+                                    text: root.failure-reason;
+                                    color: #f4f3ff;
+                                    font-size: 12.5px;
+                                    wrap: word-wrap;
+                                }
+                                Text {
+                                    text: root.failure-fixes-text;
+                                    color: #e2d9f3;
+                                    font-size: 12px;
+                                    wrap: word-wrap;
+                                }
+                            }
+                        }
+
+                        // Hardware Selection + Pipeline + Live Logs Card
+                        Rectangle {
+                            background: @linear-gradient(160deg, #1d1642 0%, #110d29 100%);
+                            border-radius: 16px;
+                            border-width: 1px;
+                            border-color: #9a80ff2c;
+
+                            VerticalLayout {
+                                padding: 18px;
+                                spacing: 14px;
+
+                                HorizontalLayout {
+                                    alignment: space-between;
+                                    Text {
+                                        text: "Select Jio STB Hardware Family";
+                                        color: #dcd6ff;
+                                        font-size: 14px;
+                                        font-weight: 700;
+                                        vertical-alignment: center;
+                                    }
+                                    HorizontalLayout {
+                                        spacing: 8px;
+                                        if root.prov-status != "running" : CosmicButton {
+                                            label: "▶  Start Unlocking";
+                                            variant: "primary";
+                                            clicked => { root.start-provision(); }
+                                        }
+                                        if root.prov-status == "running" : CosmicButton {
+                                            label: "■  Stop Servers";
+                                            variant: "danger";
+                                            clicked => { root.stop-provision(); }
+                                        }
+                                    }
+                                }
+
+                                // JHS vs JMS Cards
+                                HorizontalLayout {
+                                    spacing: 12px;
+
+                                    Rectangle {
+                                        horizontal-stretch: 1;
+                                        border-radius: 13px;
+                                        border-width: 1.5px;
+                                        background: root.selected-family == "jhs" ? #26185c : #0e0b20b8;
+                                        border-color: root.selected-family == "jhs" ? #a855f7 : #9a80ff28;
+
+                                        TouchArea {
+                                            mouse-cursor: pointer;
+                                            clicked => { root.selected-family = "jhs"; }
+                                        }
+
+                                        VerticalLayout {
+                                            padding: 14px;
+                                            spacing: 6px;
+                                            HorizontalLayout {
+                                                alignment: space-between;
+                                                Text {
+                                                    text: "JHS Series (JHSB200 / JHSC200 / JHSD200)";
+                                                    color: #ffffff;
+                                                    font-size: 13px;
+                                                    font-weight: 700;
+                                                }
+                                                Text {
+                                                    text: "JioOS 2.0";
+                                                    color: #c4b5fd;
+                                                    font-size: 11px;
+                                                    font-weight: 700;
+                                                }
+                                            }
+                                            Text {
+                                                text: "Uses eMudhra chain (forged_chain.pem), Device.JioSTB.* TR-069 tree, Iwedia OTA freeze, and keeps tr069client active so ADB survives reboots.";
+                                                color: #9892b8;
+                                                font-size: 11.5px;
+                                                wrap: word-wrap;
+                                            }
+                                        }
+                                    }
+
+                                    Rectangle {
+                                        horizontal-stretch: 1;
+                                        border-radius: 13px;
+                                        border-width: 1.5px;
+                                        background: root.selected-family == "jms" ? #26185c : #0e0b20b8;
+                                        border-color: root.selected-family == "jms" ? #a855f7 : #9a80ff28;
+
+                                        TouchArea {
+                                            mouse-cursor: pointer;
+                                            clicked => { root.selected-family = "jms"; }
+                                        }
+
+                                        VerticalLayout {
+                                            padding: 14px;
+                                            spacing: 6px;
+                                            HorizontalLayout {
+                                                alignment: space-between;
+                                                Text {
+                                                    text: "JMS Series (JMSC200A / JMSB200A / JMSD200A)";
+                                                    color: #ffffff;
+                                                    font-size: 13px;
+                                                    font-weight: 700;
+                                                }
+                                                Text {
+                                                    text: "JioOS 1.x";
+                                                    color: #7dd3fc;
+                                                    font-size: 11px;
+                                                    font-weight: 700;
+                                                }
+                                            }
+                                            Text {
+                                                text: "Uses legacy RILROOTCA chain (acs_chain.pem), Device.JSTB.* tree, and removes com.jio.tr069client cleanly after unlocking ADB.";
+                                                color: #9892b8;
+                                                font-size: 11.5px;
+                                                wrap: word-wrap;
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // 5-Step Pipeline
+                                HorizontalLayout {
+                                    spacing: 8px;
+                                    StepPill { horizontal-stretch: 1; num: 1; label: "Servers Live"; done: root.prov-status == "success" || root.current-step > 1; current: root.prov-status == "running" && root.current-step == 1; }
+                                    StepPill { horizontal-stretch: 1; num: 2; label: "DNS & NTP"; done: root.prov-status == "success" || root.current-step > 2; current: root.prov-status == "running" && root.current-step == 2; }
+                                    StepPill { horizontal-stretch: 1; num: 3; label: "CWMP TLS"; done: root.prov-status == "success" || root.current-step > 3; current: root.prov-status == "running" && root.current-step == 3; }
+                                    StepPill { horizontal-stretch: 1; num: 4; label: "ADB :5555"; done: root.prov-status == "success" || root.current-step > 4; current: root.prov-status == "running" && root.current-step == 4; }
+                                    StepPill { horizontal-stretch: 1; num: 5; label: "Hardened"; done: root.prov-status == "success"; current: root.prov-status == "running" && root.current-step == 5; }
+                                }
+
+                                // Live Logs Box
+                                HorizontalLayout {
+                                    alignment: space-between;
+                                    Text { text: "Live Diagnostic Logs"; color: #dcd6ff; font-size: 13px; font-weight: 700; }
+                                    Text { text: "Unplug the 12V DC plug for 5s after clicking Start"; color: #9892b8; font-size: 11.5px; }
+                                }
+
+                                Rectangle {
+                                    height: 230px;
+                                    background: #070513;
+                                    border-radius: 12px;
+                                    border-width: 1px;
+                                    border-color: #9a80ff2a;
+
+                                    ScrollView {
+                                        VerticalLayout {
+                                            padding: 12px;
+                                            TextInput {
+                                                text: root.logs-text;
+                                                read-only: true;
+                                                single-line: false;
+                                                wrap: word-wrap;
+                                                color: #d8d4f4;
+                                                font-family: "Consolas";
+                                                font-size: 12px;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // ---------------------------------------------------
+                    // PROMINENT CONNECT BANNER ON ALL TOOLBOX TABS
+                    // ---------------------------------------------------
+                    if root.active-tab >= 1 : ConnectBanner {
+                        ip-text <=> root.stb-ip-input;
+                        connected: root.stb-connected;
+                        target-label: root.active-target;
+                        connect(ip) => { root.connect-stb(ip); }
+                        auto-detect() => { root.detect-stb(); }
+                    }
+
+                    // ---------------------------------------------------
+                    // VIEW 1: APP MANAGER & APK SIDELOADER
+                    // ---------------------------------------------------
+                    if root.active-tab == 1 : VerticalLayout {
+                        spacing: 16px;
+
+                        // APK Sideloader Card
+                        Rectangle {
+                            background: @linear-gradient(160deg, #1d1642 0%, #110d29 100%);
+                            border-radius: 16px;
+                            border-width: 1px;
+                            border-color: #9a80ff2c;
+
+                            VerticalLayout {
+                                padding: 18px;
+                                spacing: 12px;
+
+                                HorizontalLayout {
+                                    alignment: space-between;
+                                    Text { text: "Sideload APK File (.apk)"; color: #dcd6ff; font-size: 14px; font-weight: 700; vertical-alignment: center; }
+                                    CosmicButton {
+                                        label: "Browse .apk File...";
+                                        variant: "primary";
+                                        clicked => { root.browse-apk(); }
+                                    }
+                                }
+
+                                Text {
+                                    text: root.upload-status;
+                                    color: #9892b8;
+                                    font-size: 12px;
+                                    wrap: word-wrap;
+                                }
+
+                                HorizontalLayout {
+                                    spacing: 10px;
+                                    LineEdit {
+                                        text <=> root.apk-path-input;
+                                        placeholder-text: "Or paste full local path (e.g. C:\\Downloads\\SmartTube.apk)";
+                                        horizontal-stretch: 1;
+                                        accepted(val) => { root.install-apk-path(val); }
+                                    }
+                                    CosmicButton {
+                                        label: "Install from Path";
+                                        variant: "emerald";
+                                        clicked => { root.install-apk-path(root.apk-path-input); }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Package Table Card
+                        Rectangle {
+                            background: @linear-gradient(160deg, #1d1642 0%, #110d29 100%);
+                            border-radius: 16px;
+                            border-width: 1px;
+                            border-color: #9a80ff2c;
+
+                            VerticalLayout {
+                                padding: 18px;
+                                spacing: 12px;
+
+                                // Filter Tabs
+                                HorizontalLayout {
+                                    spacing: 8px;
+                                    CosmicButton {
+                                        label: "All Removable";
+                                        variant: root.app-filter-tab == 0 ? "primary" : "default";
+                                        compact: true;
+                                        clicked => { root.app-filter-tab = 0; root.filter-packages-changed(); }
+                                    }
+                                    CosmicButton {
+                                        label: "Sideloaded (-3)";
+                                        variant: root.app-filter-tab == 1 ? "primary" : "default";
+                                        compact: true;
+                                        clicked => { root.app-filter-tab = 1; root.filter-packages-changed(); }
+                                    }
+                                    CosmicButton {
+                                        label: "Unbound / Restore";
+                                        variant: root.app-filter-tab == 2 ? "primary" : "default";
+                                        compact: true;
+                                        clicked => { root.app-filter-tab = 2; root.filter-packages-changed(); }
+                                    }
+                                    CosmicButton {
+                                        label: "Known Bloat & Ads";
+                                        variant: root.app-filter-tab == 3 ? "primary" : "default";
+                                        compact: true;
+                                        clicked => { root.app-filter-tab = 3; root.filter-packages-changed(); }
+                                    }
+                                    Rectangle { horizontal-stretch: 1; }
+                                    CosmicButton {
+                                        label: "↻  Refresh Packages";
+                                        compact: true;
+                                        clicked => { root.refresh-packages(); }
+                                    }
+                                }
+
+                                LineEdit {
+                                    text <=> root.pkg-search;
+                                    placeholder-text: "Filter package name (e.g. etv, smarttube, jio)...";
+                                    edited(val) => {
+                                        root.pkg-search = val;
+                                        root.filter-packages-changed();
+                                    }
+                                }
+
+                                // Package List
+                                Rectangle {
+                                    height: 360px;
+                                    background: #0b081b;
+                                    border-radius: 12px;
+                                    border-width: 1px;
+                                    border-color: #9a80ff22;
+
+                                    ScrollView {
+                                        VerticalLayout {
+                                            padding: 8px;
+                                            spacing: 6px;
+                                            alignment: start;
+
+                                            if root.filtered-packages.length == 0 : Text {
+                                                text: root.stb-connected
+                                                    ? "No matching packages in this tab. Click Refresh Packages."
+                                                    : "Connect to your Jio STB above, then click Refresh Packages.";
+                                                color: #9892b8;
+                                                font-size: 12.5px;
+                                                horizontal-alignment: center;
+                                            }
+
+                                            for pkg in root.filtered-packages : Rectangle {
+                                                height: 44px;
+                                                border-radius: 10px;
+                                                background: #140f2e;
+                                                border-width: 1px;
+                                                border-color: #9a80ff1e;
+
+                                                HorizontalLayout {
+                                                    padding-left: 12px;
+                                                    padding-right: 10px;
+                                                    spacing: 10px;
+
+                                                    Text {
+                                                        text: pkg.name;
+                                                        color: #f4f3ff;
+                                                        font-family: "Consolas";
+                                                        font-size: 12.5px;
+                                                        font-weight: 600;
+                                                        vertical-alignment: center;
+                                                        horizontal-stretch: 1;
+                                                        overflow: elide;
+                                                    }
+
+                                                    Rectangle {
+                                                        width: 82px;
+                                                        height: 22px;
+                                                        border-radius: 11px;
+                                                        y: (parent.height - self.height) / 2;
+                                                        background: pkg.category == "user" ? #38bdf828
+                                                            : pkg.category == "bloat" ? #f43f5e2c : #8b5cf62c;
+                                                        Text {
+                                                            text: pkg.category == "user" ? "Sideloaded"
+                                                                : pkg.category == "bloat" ? "Bloat / Ad" : "Preloaded";
+                                                            color: pkg.category == "user" ? #7dd3fc
+                                                                : pkg.category == "bloat" ? #fda4af : #ddd6fe;
+                                                            font-size: 10.5px;
+                                                            font-weight: 700;
+                                                            horizontal-alignment: center;
+                                                            vertical-alignment: center;
+                                                        }
+                                                    }
+
+                                                    Rectangle {
+                                                        width: 68px;
+                                                        height: 22px;
+                                                        border-radius: 11px;
+                                                        y: (parent.height - self.height) / 2;
+                                                        background: pkg.is-active ? #10b9812a : #8b5cf62c;
+                                                        Text {
+                                                            text: pkg.status;
+                                                            color: pkg.is-active ? #6ee7b7 : #ddd6fe;
+                                                            font-size: 10.5px;
+                                                            font-weight: 700;
+                                                            horizontal-alignment: center;
+                                                            vertical-alignment: center;
+                                                        }
+                                                    }
+
+                                                    if pkg.is-active : HorizontalLayout {
+                                                        spacing: 6px;
+                                                        CosmicButton {
+                                                            label: "Backup";
+                                                            compact: true;
+                                                            clicked => { root.backup-package(pkg.name); }
+                                                        }
+                                                        CosmicButton {
+                                                            label: "Uninstall";
+                                                            variant: "danger";
+                                                            compact: true;
+                                                            clicked => { root.uninstall-package(pkg.name); }
+                                                        }
+                                                    }
+
+                                                    if !pkg.is-active : CosmicButton {
+                                                        label: "Restore";
+                                                        variant: "emerald";
+                                                        compact: true;
+                                                        clicked => { root.restore-package(pkg.name); }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // ---------------------------------------------------
+                    // VIEW 2: LAUNCHERS & SHIELD
+                    // ---------------------------------------------------
+                    if root.active-tab == 2 : VerticalLayout {
+                        spacing: 16px;
+
+                        HorizontalLayout {
+                            spacing: 16px;
+
+                            // Custom Launcher Card
+                            Rectangle {
+                                horizontal-stretch: 1;
+                                background: @linear-gradient(160deg, #1d1642 0%, #110d29 100%);
+                                border-radius: 16px;
+                                border-width: 1px;
+                                border-color: #9a80ff2c;
+
+                                VerticalLayout {
+                                    padding: 18px;
+                                    spacing: 12px;
+
+                                    HorizontalLayout {
+                                        alignment: space-between;
+                                        Text { text: "Custom Home Launcher Switcher"; color: #dcd6ff; font-size: 14px; font-weight: 700; vertical-alignment: center; }
+                                        CosmicButton {
+                                            label: "↻  Scan";
+                                            compact: true;
+                                            clicked => { root.scan-launchers(); }
+                                        }
+                                    }
+
+                                    if root.launchers.length == 0 : Text {
+                                        text: "Click Scan to list installed third-party HOME launchers.";
+                                        color: #9892b8;
+                                        font-size: 12px;
+                                    }
+
+                                    for comp in root.launchers : Rectangle {
+                                        height: 40px;
+                                        border-radius: 10px;
+                                        background: #0e0b20cc;
+                                        border-width: 1px;
+                                        border-color: #9a80ff26;
+
+                                        HorizontalLayout {
+                                            padding-left: 10px;
+                                            padding-right: 8px;
+                                            spacing: 8px;
+                                            Text {
+                                                text: comp;
+                                                color: #e4e0ff;
+                                                font-family: "Consolas";
+                                                font-size: 11.5px;
+                                                vertical-alignment: center;
+                                                horizontal-stretch: 1;
+                                                overflow: elide;
+                                            }
+                                            CosmicButton {
+                                                label: "Activate";
+                                                variant: "primary";
+                                                compact: true;
+                                                clicked => { root.activate-launcher(comp); }
+                                            }
+                                        }
+                                    }
+
+                                    HorizontalLayout {
+                                        spacing: 8px;
+                                        LineEdit {
+                                            text <=> root.custom-launcher-input;
+                                            placeholder-text: "package/.Activity";
+                                            horizontal-stretch: 1;
+                                        }
+                                        CosmicButton {
+                                            label: "Set Home";
+                                            variant: "primary";
+                                            clicked => { root.activate-launcher(root.custom-launcher-input); }
+                                        }
+                                    }
+
+                                    HorizontalLayout {
+                                        spacing: 8px;
+                                        CosmicButton {
+                                            label: "Supercharge tvOS Launcher";
+                                            variant: "primary";
+                                            clicked => { root.supercharge-tvos(); }
+                                        }
+                                        CosmicButton {
+                                            label: "Kill Jio Launchers";
+                                            variant: "danger";
+                                            clicked => { root.fix-home(); }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Ad-Free & Auto-Redownload Shield Card
+                            Rectangle {
+                                horizontal-stretch: 1;
+                                background: @linear-gradient(160deg, #1d1642 0%, #110d29 100%);
+                                border-radius: 16px;
+                                border-width: 1px;
+                                border-color: #9a80ff2c;
+
+                                VerticalLayout {
+                                    padding: 18px;
+                                    spacing: 12px;
+
+                                    Text { text: "Ad-Free & Auto-Redownload Shield"; color: #dcd6ff; font-size: 14px; font-weight: 700; }
+                                    Text {
+                                        text: "Neutralizes Jio boot ad injectors, screensaver promos, Iwedia OTA daemons, and blocks silent app redownloads (like ETV) while keeping JHS tr069client safe.";
+                                        color: #9892b8;
+                                        font-size: 12px;
+                                        wrap: word-wrap;
+                                    }
+
+                                    HorizontalLayout {
+                                        spacing: 8px;
+                                        CosmicButton {
+                                            label: "Remove Boot Ads & Promos";
+                                            variant: "emerald";
+                                            clicked => { root.remove-ads(); }
+                                        }
+                                        CosmicButton {
+                                            label: "Block ETV & Auto-Redownloads";
+                                            variant: "primary";
+                                            clicked => { root.block-redownloads(root.block-keyword-input); }
+                                        }
+                                    }
+
+                                    LineEdit {
+                                        text <=> root.block-keyword-input;
+                                        placeholder-text: "Optional extra keyword to block (e.g. hotstar, zee5)";
+                                    }
+                                }
+                            }
+                        }
+
+                        // Last Action Output
+                        Rectangle {
+                            background: @linear-gradient(160deg, #1d1642 0%, #110d29 100%);
+                            border-radius: 16px;
+                            border-width: 1px;
+                            border-color: #9a80ff2c;
+
+                            VerticalLayout {
+                                padding: 16px;
+                                spacing: 10px;
+                                Text { text: "Last Action Output"; color: #dcd6ff; font-size: 13.5px; font-weight: 700; }
+                                Rectangle {
+                                    height: 170px;
+                                    background: #070513;
+                                    border-radius: 12px;
+                                    border-width: 1px;
+                                    border-color: #9a80ff28;
+                                    ScrollView {
+                                        VerticalLayout {
+                                            padding: 12px;
+                                            TextInput {
+                                                text: root.shield-output;
+                                                read-only: true;
+                                                single-line: false;
+                                                wrap: word-wrap;
+                                                color: #d8d4f4;
+                                                font-family: "Consolas";
+                                                font-size: 12px;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // ---------------------------------------------------
+                    // VIEW 3: TWEAKS & REMOTE
+                    // ---------------------------------------------------
+                    if root.active-tab == 3 : VerticalLayout {
+                        spacing: 16px;
+
+                        HorizontalLayout {
+                            spacing: 16px;
+
+                            Rectangle {
+                                horizontal-stretch: 1;
+                                background: @linear-gradient(160deg, #1d1642 0%, #110d29 100%);
+                                border-radius: 16px;
+                                border-width: 1px;
+                                border-color: #9a80ff2c;
+
+                                VerticalLayout {
+                                    padding: 18px;
+                                    spacing: 12px;
+                                    Text { text: "Performance & RAM Booster"; color: #dcd6ff; font-size: 14px; font-weight: 700; }
+                                    Text { text: "Adjust Android TV animation scales, trim package caches, and clear idle background tasks."; color: #9892b8; font-size: 12px; wrap: word-wrap; }
+                                    HorizontalLayout {
+                                        spacing: 8px;
+                                        CosmicButton { horizontal-stretch: 1; label: "0.5x Fast"; variant: "primary"; clicked => { root.boost-perf("0.5"); } }
+                                        CosmicButton { horizontal-stretch: 1; label: "0.0x Instant"; clicked => { root.boost-perf("0.0"); } }
+                                        CosmicButton { horizontal-stretch: 1; label: "1.0x Stock"; clicked => { root.boost-perf("1.0"); } }
+                                    }
+                                }
+                            }
+
+                            Rectangle {
+                                horizontal-stretch: 1;
+                                background: @linear-gradient(160deg, #1d1642 0%, #110d29 100%);
+                                border-radius: 16px;
+                                border-width: 1px;
+                                border-color: #9a80ff2c;
+
+                                VerticalLayout {
+                                    padding: 18px;
+                                    spacing: 12px;
+                                    Text { text: "System-Wide Private DNS (DoT)"; color: #dcd6ff; font-size: 14px; font-weight: 700; }
+                                    Text { text: "Block ads and trackers across every TV app using DNS-over-TLS."; color: #9892b8; font-size: 12px; wrap: word-wrap; }
+                                    HorizontalLayout {
+                                        spacing: 8px;
+                                        CosmicButton { label: "AdGuard"; variant: "emerald"; clicked => { root.set-private-dns("dns.adguard-dns.com"); } }
+                                        CosmicButton { label: "Cloudflare"; clicked => { root.set-private-dns("one.one.one.one"); } }
+                                        CosmicButton { label: "Google"; clicked => { root.set-private-dns("dns.google"); } }
+                                        CosmicButton { label: "Turn Off"; variant: "danger"; clicked => { root.set-private-dns(""); } }
+                                    }
+                                }
+                            }
+                        }
+
+                        HorizontalLayout {
+                            spacing: 16px;
+
+                            Rectangle {
+                                horizontal-stretch: 1;
+                                background: @linear-gradient(160deg, #1d1642 0%, #110d29 100%);
+                                border-radius: 16px;
+                                border-width: 1px;
+                                border-color: #9a80ff2c;
+
+                                VerticalLayout {
+                                    padding: 18px;
+                                    spacing: 12px;
+                                    Text { text: "Remote Helper & Live TV Screenshot"; color: #dcd6ff; font-size: 14px; font-weight: 700; }
+
+                                    HorizontalLayout {
+                                        spacing: 8px;
+                                        CosmicButton { label: "Settings"; compact: true; clicked => { root.remote-action("settings", ""); } }
+                                        CosmicButton { label: "Dev Options"; compact: true; clicked => { root.remote-action("dev_options", ""); } }
+                                        CosmicButton { label: "Home Key"; compact: true; clicked => { root.remote-action("home", ""); } }
+                                        CosmicButton { label: "Back Key"; compact: true; clicked => { root.remote-action("back", ""); } }
+                                        CosmicButton { label: "Capture Screen"; variant: "primary"; compact: true; clicked => { root.capture-screenshot(); } }
+                                    }
+
+                                    HorizontalLayout {
+                                        spacing: 8px;
+                                        LineEdit {
+                                            text <=> root.tv-text-input;
+                                            placeholder-text: "Type password or text onto TV screen...";
+                                            horizontal-stretch: 1;
+                                            accepted(val) => { root.remote-action("text", val); }
+                                        }
+                                        CosmicButton {
+                                            label: "Send Text";
+                                            variant: "primary";
+                                            clicked => { root.remote-action("text", root.tv-text-input); }
+                                        }
+                                    }
+
+                                    if root.has-screenshot : Rectangle {
+                                        height: 220px;
+                                        background: #070513;
+                                        border-radius: 10px;
+                                        border-width: 1px;
+                                        border-color: #9a80ff38;
+                                        Image {
+                                            source: root.screenshot-image;
+                                            image-fit: contain;
+                                            width: 100%;
+                                            height: 100%;
+                                        }
+                                    }
+                                }
+                            }
+
+                            Rectangle {
+                                horizontal-stretch: 1;
+                                background: @linear-gradient(160deg, #1d1642 0%, #110d29 100%);
+                                border-radius: 16px;
+                                border-width: 1px;
+                                border-color: #9a80ff2c;
+
+                                VerticalLayout {
+                                    padding: 18px;
+                                    spacing: 12px;
+                                    Text { text: "Power & ADB Daemon"; color: #dcd6ff; font-size: 14px; font-weight: 700; }
+                                    HorizontalLayout {
+                                        spacing: 8px;
+                                        CosmicButton { horizontal-stretch: 1; label: "Normal Reboot"; variant: "primary"; clicked => { root.reboot-stb("normal"); } }
+                                        CosmicButton { horizontal-stretch: 1; label: "Restart ADB :5555"; variant: "emerald"; clicked => { root.reboot-stb("tcpip"); } }
+                                    }
+                                    HorizontalLayout {
+                                        spacing: 8px;
+                                        CosmicButton { horizontal-stretch: 1; label: "Recovery Mode"; clicked => { root.reboot-stb("recovery"); } }
+                                        CosmicButton { horizontal-stretch: 1; label: "Bootloader"; variant: "danger"; clicked => { root.reboot-stb("bootloader"); } }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // ---------------------------------------------------
+                    // VIEW 4: ADVANCED ADB TERMINAL
+                    // ---------------------------------------------------
+                    if root.active-tab == 4 : VerticalLayout {
+                        spacing: 12px;
+
+                        HorizontalLayout {
+                            spacing: 6px;
+                            CosmicButton { label: "devices"; compact: true; clicked => { root.run-term-cmd("devices"); } }
+                            CosmicButton { label: "model"; compact: true; clicked => { root.run-term-cmd("shell getprop ro.product.model"); } }
+                            CosmicButton { label: "android ver"; compact: true; clicked => { root.run-term-cmd("shell getprop ro.build.version.release"); } }
+                            CosmicButton { label: "user apps"; compact: true; clicked => { root.run-term-cmd("shell pm list packages -3"); } }
+                            CosmicButton { label: "current home"; compact: true; clicked => { root.run-term-cmd("shell cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.HOME"); } }
+                            CosmicButton { label: "wm size"; compact: true; clicked => { root.run-term-cmd("shell wm size"); } }
+                            CosmicButton { label: "Clear"; variant: "danger"; compact: true; clicked => { root.clear-term(); } }
+                        }
+
+                        Rectangle {
+                            height: 440px;
+                            background: #060411;
+                            border-radius: 14px;
+                            border-width: 1px;
+                            border-color: #a78bfa55;
+
+                            VerticalLayout {
+                                Rectangle {
+                                    height: 36px;
+                                    background: #181234;
+                                    HorizontalLayout {
+                                        padding-left: 14px;
+                                        padding-right: 14px;
+                                        alignment: space-between;
+                                        Text { text: "FerroSTB Embedded ADB Shell"; color: #9892b8; font-size: 12px; vertical-alignment: center; }
+                                        Text {
+                                            text: root.stb-connected ? ("Target: " + root.active-target) : "Target: none";
+                                            color: #c4b5fd;
+                                            font-size: 12px;
+                                            font-weight: 600;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+                                }
+
+                                ScrollView {
+                                    vertical-stretch: 1;
+                                    VerticalLayout {
+                                        padding: 12px;
+                                        TextInput {
+                                            text: root.term-output;
+                                            read-only: true;
+                                            single-line: false;
+                                            wrap: word-wrap;
+                                            color: #d8d4f4;
+                                            font-family: "Consolas";
+                                            font-size: 12.5px;
+                                        }
+                                    }
+                                }
+
+                                Rectangle {
+                                    height: 48px;
+                                    background: #120e28;
+                                    HorizontalLayout {
+                                        padding-left: 14px;
+                                        padding-right: 10px;
+                                        spacing: 8px;
+                                        Text {
+                                            text: "adb >";
+                                            color: #a855f7;
+                                            font-family: "Consolas";
+                                            font-weight: 700;
+                                            vertical-alignment: center;
+                                        }
+                                        LineEdit {
+                                            text <=> root.term-input;
+                                            placeholder-text: "shell getprop ro.product.model";
+                                            horizontal-stretch: 1;
+                                            accepted(val) => { root.run-term-cmd(val); }
+                                        }
+                                        CosmicButton {
+                                            label: "Run";
+                                            variant: "primary";
+                                            compact: true;
+                                            clicked => { root.run-term-cmd(root.term-input); }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Floating Toast Banner (bottom-right)
+    if root.toast-visible : Rectangle {
+        x: parent.width - self.width - 22px;
+        y: parent.height - self.height - 22px;
+        width: 420px;
+        height: 46px;
+        border-radius: 12px;
+        background: #1a133be8;
+        border-width: 1.5px;
+        border-color: #a855f7cc;
+
+        HorizontalLayout {
+            padding-left: 14px;
+            padding-right: 10px;
+            spacing: 8px;
+            alignment: space-between;
+
+            Text {
+                text: root.toast-message;
+                color: #ffffff;
+                font-size: 12.5px;
+                font-weight: 600;
+                vertical-alignment: center;
+                overflow: elide;
+                horizontal-stretch: 1;
+            }
+
+            CosmicButton {
+                label: "×";
+                compact: true;
+                clicked => { root.dismiss-toast(); }
+            }
+        }
+    }
+}

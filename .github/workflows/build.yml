@@ -1,4 +1,4 @@
-name: Build & Release FerroSTB v1.0.0 (Unified GUI Suite)
+name: Build & Release FerroSTB v1.0.0 (Native Slint Suite)
 
 on:
   push:
@@ -24,7 +24,7 @@ jobs:
       - name: Cache Rust dependencies and build artifacts
         uses: Swatinem/rust-cache@v2
         with:
-          key: windows-msvc
+          key: windows-msvc-slint
 
       - name: Build Unified Windows Binary (ferrostb.exe)
         run: cargo build --release --target x86_64-pc-windows-msvc
@@ -48,6 +48,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Install Slint Linux GUI build libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            pkg-config \
+            libfontconfig1-dev \
+            libxcb-shape0-dev \
+            libxcb-xfixes0-dev \
+            libxkbcommon-dev \
+            libxkbcommon-x11-dev
+
       - name: Fetch Official Google Android Platform-Tools (Linux ADB)
         run: |
           curl -sSL https://dl.google.com/android/repository/platform-tools-latest-linux.zip -o pt.zip
@@ -64,7 +75,7 @@ jobs:
       - name: Cache Rust dependencies and build artifacts
         uses: Swatinem/rust-cache@v2
         with:
-          key: linux-gnu
+          key: linux-gnu-slint
 
       - name: Build Unified Linux Binary (ferrostb)
         run: cargo build --release --target x86_64-unknown-linux-gnu
@@ -100,11 +111,12 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.0
-          name: "FerroSTB v1.0.0 — Unified Cosmic-Violet GUI Suite (Provisioner + Toolbox + ADB Shell)"
+          name: "FerroSTB v1.0.0 — Native Slint Cosmic-Violet Suite (Provisioner + Toolbox + ADB Shell)"
           body: |
-            ### FerroSTB v1.0.0 — Single Unified Executable
-            * **All-in-One UI:** Provisioner (JHSB200/JHSC200/JHSD200 & JMS), Visual App Manager, Drag-and-Drop APK Sideloader, Launcher & Boot-Ad Shield, Performance Tweaks, and **Advanced Mode ADB Terminal** bundled inside one binary.
-            * **Diagnostic Logs:** Live 5-stage pipeline with pinpointed error diagnostics and one-click recovery guidance.
+            ### FerroSTB v1.0.0 — Single Native Executable (Zero WebView2 / Zero Browser)
+            * **Native Slint UI + App Icon:** Lightweight native Cosmic-Violet interface with embedded Windows/Linux app icon and prominent Connect-to-STB banner across all Toolbox tabs.
+            * **VPN-Safe IPv4 Detection:** Filters out Cloudflare WARP, Tailscale, WireGuard, OpenVPN, WSL, and Hyper-V virtual interfaces automatically, with an interactive LAN adapter selector.
+            * **Bundled `forged_chain.pem`:** JHSB200/JHSC200/JHSD200 and JMS support built directly into one executable.
             * **`FerroSTB-Windows-v1.0.0.zip`**: Single `ferrostb.exe` for Windows 10/11 (Run as Administrator).
             * **`FerroSTB-Linux-v1.0.0.zip` / `.tar.gz`**: Single `ferrostb` for Linux x86_64 (`sudo ./ferrostb`).
           draft: false

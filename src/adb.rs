@@ -91,7 +91,15 @@ pub struct RawCmdResult {
 }
 
 pub fn adb_exec(adb_bin: &Path, args: &[&str]) -> (bool, String, String, i32) {
-    match Command::new(adb_bin).args(args).output() {
+    let mut cmd = Command::new(adb_bin);
+    cmd.args(args);
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    match cmd.output() {
         Ok(out) => (
             out.status.success(),
             String::from_utf8_lossy(&out.stdout).to_string(),

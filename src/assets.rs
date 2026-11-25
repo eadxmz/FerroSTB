@@ -18,7 +18,6 @@ pub const SHEVERY_APK: &[u8] = include_bytes!("../shevery-release.apk");
 
 pub const ACS_CHAIN_PEM: &[u8] = include_bytes!("../tls/acs_chain.pem");
 pub const FORGED_CHAIN_PEM: &[u8] = include_bytes!("../tls/forged_chain.pem");
-pub const UI_INDEX_HTML: &str = include_str!("../ui/index.html");
 
 fn is_valid_pem_bundle(bytes: &[u8]) -> bool {
     let text = String::from_utf8_lossy(bytes);

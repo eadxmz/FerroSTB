@@ -262,6 +262,19 @@ impl AppState {
         self.inner.lock().ok().and_then(|st| st.active_target.clone())
     }
 
+    pub fn set_host_ip(&self, ip: String) {
+        if let Ok(mut st) = self.inner.lock() {
+            st.host_ip = ip;
+        }
+    }
+
+    pub fn host_ip(&self) -> String {
+        self.inner
+            .lock()
+            .map(|st| st.host_ip.clone())
+            .unwrap_or_else(|_| "Unknown".to_string())
+    }
+
     pub fn snapshot(&self) -> ProvisionSnapshot {
         let st = self.inner.lock().unwrap();
         ProvisionSnapshot {

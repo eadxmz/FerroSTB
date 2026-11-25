@@ -6,7 +6,7 @@ use crate::dns;
 use crate::logger::AppState;
 use crate::ntp;
 use anyhow::Result;
-use local_ip_address::local_ip;
+use local_ip_address::{list_afinet_netifas, local_ip};
 use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::process::Command;
@@ -19,7 +19,93 @@ use tokio::time::{sleep, timeout};
 #[cfg(target_os = "windows")]
 const FW_RULE_NAME: &str = "FerroSTB_AutoAllow";
 
+const IGNORED_IFACE_SUBSTRINGS: &[&str] = &[
+    "warp", "cloudflare", "wireguard", "wg", "tailscale", "zerotier", "zt",
+    "tun", "tap", "utun", "openvpn", "nord", "mullvad", "proton", "hamachi",
+    "radmin", "vethernet", "wsl", "docker", "br-", "virbr", "vmnet", "vbox",
+    "hyper-v", "loopback",
+];
+
+fn is_cgnat(ip: Ipv4Addr) -> bool {
+    let [a, b, ..] = ip.octets();
+    a == 100 && (64..=127).contains(&b)
+}
+
+fn is_rfc1918(ip: Ipv4Addr) -> bool {
+    let [a, b, ..] = ip.octets();
+    a == 10 || (a == 172 && (16..=31).contains(&b)) || (a == 192 && b == 168)
+}
+
+fn score_lan_iface(name_lower: &str, ip: Ipv4Addr) -> i32 {
+    let [a, b, c, _] = ip.octets();
+    let mut score = 0;
+    if a == 192 && b == 168 {
+        score += 100;
+        if c == 29 {
+            score += 20; // JioFiber / JioAirFiber default LAN subnet
+        }
+    } else if a == 10 {
+        score += 60;
+    } else if a == 172 && (16..=31).contains(&b) {
+        score += 10;
+    }
+
+    if name_lower.contains("ethernet")
+        || name_lower.starts_with("eth")
+        || name_lower.starts_with("enp")
+        || name_lower.starts_with("en")
+    {
+        score += 30;
+    } else if name_lower.contains("wi-fi")
+        || name_lower.contains("wifi")
+        || name_lower.starts_with("wlan")
+        || name_lower.starts_with("wlp")
+    {
+        score += 25;
+    }
+    score
+}
+
+pub fn list_lan_ipv4s() -> Vec<(String, Ipv4Addr)> {
+    let Ok(ifaces) = list_afinet_netifas() else {
+        return Vec::new();
+    };
+
+    let mut scored: Vec<(i32, String, Ipv4Addr)> = ifaces
+        .into_iter()
+        .filter_map(|(name, addr)| {
+            let IpAddr::V4(ip) = addr else { return None };
+            if ip.is_loopback() || ip.is_link_local() || ip.is_unspecified() || is_cgnat(ip) {
+                return None;
+            }
+            if !is_rfc1918(ip) {
+                return None;
+            }
+            // Exclude Cloudflare WARP's default virtual IPv4 on Windows
+            if ip == Ipv4Addr::new(172, 16, 0, 2) {
+                return None;
+            }
+            let lower = name.to_ascii_lowercase();
+            if IGNORED_IFACE_SUBSTRINGS.iter().any(|bad| lower.contains(bad)) {
+                return None;
+            }
+            Some((score_lan_iface(&lower, ip), name, ip))
+        })
+        .collect();
+
+    scored.sort_by(|a, b| b.0.cmp(&a.0));
+    let mut seen = std::collections::HashSet::new();
+    scored
+        .into_iter()
+        .filter(|(_, _, ip)| seen.insert(*ip))
+        .map(|(_, name, ip)| (name, ip))
+        .collect()
+}
+
 pub fn detect_host_ipv4() -> Result<Ipv4Addr> {
+    if let Some((_, ip)) = list_lan_ipv4s().into_iter().next() {
+        return Ok(ip);
+    }
     match local_ip()? {
         IpAddr::V4(ip) => Ok(ip),
         _ => anyhow::bail!("Could not detect a valid LAN IPv4 address"),
@@ -58,7 +144,7 @@ pub async fn run_provisioning_pipeline(family: StbFamily, app: Arc<AppState>) {
         }
     };
 
-    let host_ip = match detect_host_ipv4() {
+    let host_ip = match app.host_ip().parse::<Ipv4Addr>().or_else(|_| detect_host_ipv4().map_err(|e| e.to_string())) {
         Ok(ip) => ip,
         Err(e) => {
             app.set_failure(
