@@ -11,4 +11,4 @@ generate_docs.py
 # Ensure FerroSTB SVG/ICO icon assets are always tracked
 !assets/
 !assets/ferrostb.svg
-!assets/ferrostb.ico
+!assets/*.png
